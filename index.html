@@ -1,0 +1,3778 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta name="theme-color" content="#0f172a" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <title>RailForge — Model Railway Layout PWA</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap" rel="stylesheet" />
+  <script>
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ["Inter", "system-ui", "sans-serif"],
+            mono: ["JetBrains Mono", "monospace"]
+          },
+          colors: {
+            forge: {
+              950: "#080d18",
+              900: "#0f172a",
+              850: "#162033",
+              800: "#1e293b"
+            }
+          }
+        }
+      }
+    };
+  </script>
+  <style>
+    html, body {
+      height: 100%;
+      width: 100%;
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
+      overscroll-behavior: none;
+      touch-action: none;
+      background-color: #080d18;
+      color: #f8fafc;
+      -webkit-tap-highlight-color: transparent;
+      user-select: none;
+    }
+    .drawer-scroll {
+      touch-action: pan-y;
+      overscroll-behavior: contain;
+    }
+    .h-scroll {
+      touch-action: pan-x;
+      overscroll-behavior: contain;
+    }
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      touch-action: none;
+    }
+    ::-webkit-scrollbar {
+      width: 4px;
+      height: 4px;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: rgba(148, 163, 184, 0.35);
+      border-radius: 9999px;
+    }
+  </style>
+</head>
+<body class="bg-forge-950 text-slate-100 font-sans antialiased selection:bg-amber-500/30">
+  <div id="app" class="flex flex-col h-full w-full overflow-hidden">
+
+    <!-- Top Compact Header Bar -->
+    <header class="flex items-center justify-between px-3 py-2 bg-forge-900/95 border-b border-slate-800/90 z-20 shrink-0 gap-2">
+      <div class="flex items-center gap-2 min-w-0">
+        <div class="w-8 h-8 rounded-xl bg-gradient-to-br from-amber-400 to-orange-600 flex items-center justify-center shadow-md shadow-amber-500/20 shrink-0">
+          <svg class="w-4 h-4 text-slate-950" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4">
+            <path d="M4 17h16M6 17l2-9h8l2 9M9 8V5h6v3M7 20h10" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </div>
+        <div class="min-w-0">
+          <div class="flex items-center gap-1.5">
+            <span id="layout-title-display" class="text-sm font-bold tracking-tight text-white truncate">Ravenglass &amp; Murthwaite OO9</span>
+            <span id="pwa-badge" class="hidden sm:inline-block text-[10px] font-mono uppercase px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">PWA</span>
+          </div>
+          <div id="layout-stats" class="text-[11px] font-mono text-slate-400 truncate">0 pcs • 0 mm</div>
+        </div>
+      </div>
+
+      <!-- Undo / Redo / Units / Layouts -->
+      <div class="flex items-center gap-1 shrink-0">
+        <button id="btn-undo" title="Undo" aria-label="Undo" class="p-2 rounded-xl bg-slate-800/90 hover:bg-slate-700 active:scale-95 text-slate-200 disabled:opacity-35 transition">
+          <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 14L4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 5.5 5.5v0a5.5 5.5 0 0 1-5.5 5.5H11"/></svg>
+        </button>
+        <button id="btn-redo" title="Redo" aria-label="Redo" class="p-2 rounded-xl bg-slate-800/90 hover:bg-slate-700 active:scale-95 text-slate-200 disabled:opacity-35 transition">
+          <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 14l5-5-5-5"/><path d="M20 9H9.5A5.5 5.5 0 0 0 4 14.5v0A5.5 5.5 0 0 0 9.5 20H13"/></svg>
+        </button>
+        <button id="btn-unit" title="Toggle Metric / Imperial" class="px-2.5 py-2 rounded-xl bg-slate-800/90 hover:bg-slate-700 active:scale-95 text-xs font-mono font-semibold text-amber-400 transition">
+          mm
+        </button>
+        <button id="btn-layouts-modal" title="Layouts, Presets &amp; Import/Export" class="px-2.5 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 active:scale-95 text-xs font-semibold text-slate-950 transition">
+          Layouts
+        </button>
+      </div>
+    </header>
+
+    <!-- Main Interactive Canvas Area -->
+    <main id="canvas-container" class="relative flex-1 w-full min-h-0 overflow-hidden bg-forge-950">
+      <canvas id="layout-canvas"></canvas>
+
+      <!-- Top-Left Mode & Tool Pill Bar -->
+      <div class="absolute top-3 left-3 z-20 flex flex-wrap items-center gap-1.5 max-w-[calc(100%-5.2rem)]">
+        <div class="flex items-center p-1 rounded-xl bg-forge-900/90 backdrop-blur-md border border-slate-700/80 shadow-lg">
+          <button data-tool="select" class="tool-btn flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-amber-500 text-slate-950 shadow transition">
+            <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M5 3l14 9-7 1-3 7z"/></svg>
+            <span>Track</span>
+          </button>
+          <button data-tool="poly-boundary" class="tool-btn flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold text-slate-300 hover:text-white transition">
+            <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 22 8.5 19 20 5 20 2 8.5"/></svg>
+            <span>Board</span>
+          </button>
+          <button data-tool="poly-section" class="tool-btn flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold text-slate-300 hover:text-white transition">
+            <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="3" stroke-dasharray="4 2"/></svg>
+            <span>Section</span>
+          </button>
+        </div>
+
+        <!-- Group vs Single Piece Toggle (Track Mode) -->
+        <button id="btn-group-mode" class="flex items-center gap-1.5 px-2.5 py-2 rounded-xl bg-forge-900/90 backdrop-blur-md border border-cyan-500/40 text-xs font-semibold text-cyan-300 shadow-lg active:scale-95 transition">
+          <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="7" cy="12" r="3"/><circle cx="17" cy="12" r="3"/><path d="M10 12h4"/></svg>
+          <span id="group-mode-label">Group Move</span>
+        </button>
+
+        <!-- Board Mode Quick Tools: 90° Angle Snap & Standard Shape Board Creator -->
+        <div id="board-mode-tools" class="hidden flex items-center gap-1.5">
+          <button id="btn-snap-90" class="flex items-center gap-1 px-2.5 py-2 rounded-xl bg-emerald-500/20 border border-emerald-500/50 text-xs font-mono font-semibold text-emerald-300 shadow-lg active:scale-95 transition" title="Snap board corner angles to 90°">
+            <span>∟ 90° Snap</span>
+          </button>
+          <button id="btn-open-shape-modal" class="flex items-center gap-1 px-2.5 py-2 rounded-xl bg-forge-900/90 backdrop-blur-md border border-amber-500/50 text-xs font-semibold text-amber-300 shadow-lg active:scale-95 transition">
+            <span>+ Shape Board</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Top-Right Canvas Zoom & Export Controls -->
+      <div class="absolute top-3 right-3 z-20 flex flex-col gap-1.5">
+        <button id="btn-zoom-in" title="Zoom In" class="w-9 h-9 rounded-xl bg-forge-900/90 backdrop-blur-md border border-slate-700/80 flex items-center justify-center text-slate-200 hover:bg-slate-800 shadow-lg active:scale-95 text-base font-bold">+</button>
+        <button id="btn-zoom-out" title="Zoom Out" class="w-9 h-9 rounded-xl bg-forge-900/90 backdrop-blur-md border border-slate-700/80 flex items-center justify-center text-slate-200 hover:bg-slate-800 shadow-lg active:scale-95 text-base font-bold">−</button>
+        <button id="btn-fit" title="Fit Layout to Screen" class="w-9 h-9 rounded-xl bg-forge-900/90 backdrop-blur-md border border-slate-700/80 flex items-center justify-center text-slate-200 hover:bg-slate-800 shadow-lg active:scale-95">
+          <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+        </button>
+        <button id="btn-toggle-ports" title="Toggle Open Port Markers" class="w-9 h-9 rounded-xl bg-forge-900/90 backdrop-blur-md border border-amber-500/40 flex items-center justify-center text-amber-400 hover:bg-slate-800 shadow-lg active:scale-95">
+          <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="4"/><path d="M12 2v4M12 18v4M2 12h4M18 12h4"/></svg>
+        </button>
+        <button id="btn-export-png" title="Export Layout to PNG Image" class="w-9 h-9 rounded-xl bg-forge-900/90 backdrop-blur-md border border-cyan-500/40 flex items-center justify-center text-cyan-300 hover:bg-slate-800 shadow-lg active:scale-95">
+          <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+        </button>
+      </div>
+
+      <!-- Polygon Drawing Action Banner -->
+      <div id="poly-draw-banner" class="hidden absolute top-16 left-3 right-14 z-20 flex items-center justify-between gap-2 px-3 py-2 rounded-xl bg-emerald-950/90 backdrop-blur-md border border-emerald-500/50 text-xs shadow-xl">
+        <span id="poly-draw-status" class="text-emerald-200 font-medium">Tap canvas to place vertices</span>
+        <div class="flex items-center gap-1.5 shrink-0">
+          <button id="btn-poly-undo-pt" class="px-2 py-1 rounded-lg bg-slate-800 text-slate-200 font-medium">Undo Pt</button>
+          <button id="btn-poly-close" class="px-2.5 py-1 rounded-lg bg-emerald-500 text-slate-950 font-bold disabled:opacity-40" disabled>Close</button>
+          <button id="btn-poly-cancel" class="px-2 py-1 rounded-lg bg-rose-500/20 text-rose-300 font-medium">Cancel</button>
+        </div>
+      </div>
+
+      <!-- Loop / End-to-End Gap Helper Pill -->
+      <div id="gap-helper-pill" class="hidden absolute bottom-3 left-3 z-10 px-2.5 py-1.5 rounded-xl bg-forge-900/90 backdrop-blur-md border border-slate-700/80 text-[11px] font-mono text-slate-300 shadow-lg pointer-events-none"></div>
+
+      <!-- Toast Message Box -->
+      <div id="toast-box" class="hidden fixed top-16 left-1/2 -translate-x-1/2 z-50 px-3.5 py-2 rounded-xl bg-slate-800/95 border border-amber-500/50 text-xs font-medium text-amber-200 shadow-2xl pointer-events-none"></div>
+
+      <!-- Floating Contextual Selection Toolbar -->
+      <div id="selection-toolbar" class="hidden absolute bottom-3 left-3 right-3 z-20 rounded-2xl bg-forge-900/95 backdrop-blur-md border border-slate-700/90 p-2.5 shadow-2xl">
+        <div id="track-sel-controls" class="flex flex-col gap-2">
+          <div class="flex items-center justify-between gap-2">
+            <div class="min-w-0">
+              <div class="flex items-center gap-1.5">
+                <span id="sel-sku" class="text-xs font-mono font-bold px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300">ST-401</span>
+                <span id="sel-name" class="text-xs font-bold text-white truncate">Setrack Standard Straight</span>
+              </div>
+              <div id="sel-meta" class="text-[11px] font-mono text-slate-400 truncate mt-0.5">Group: 1 pc</div>
+            </div>
+            <div class="flex items-center gap-1 shrink-0">
+              <button id="btn-sel-fav" title="Toggle Favourite" class="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-amber-400">
+                <svg id="sel-fav-icon" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+              </button>
+              <button id="btn-sel-duplicate" title="Duplicate Piece" class="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-cyan-300">
+                <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+              </button>
+              <button id="btn-sel-delete" title="Delete Piece" class="p-2 rounded-xl bg-rose-500/20 hover:bg-rose-500/30 text-rose-300">
+                <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/></svg>
+              </button>
+            </div>
+          </div>
+
+          <!-- Rotation & Disconnect Action Row -->
+          <div class="flex flex-wrap items-center justify-between gap-1.5 pt-1 border-t border-slate-800">
+            <div class="flex items-center gap-1">
+              <button data-rot="-45" class="rot-step-btn px-2 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-[11px] font-mono font-semibold text-slate-200 border border-slate-700">-45°</button>
+              <button data-rot="-15" class="rot-step-btn px-2 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-[11px] font-mono font-semibold text-slate-200 border border-slate-700">-15°</button>
+              <button data-rot="15" class="rot-step-btn px-2 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-[11px] font-mono font-semibold text-slate-200 border border-slate-700">+15°</button>
+              <button data-rot="45" class="rot-step-btn px-2 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-[11px] font-mono font-semibold text-slate-200 border border-slate-700">+45°</button>
+              <input id="inp-sel-angle" type="number" step="1" class="w-14 px-1.5 py-1 rounded-lg bg-slate-950 border border-slate-700 text-xs font-mono text-center text-amber-300" title="Exact Rotation Angle (deg)" />
+            </div>
+            <button id="btn-sel-disconnect" class="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/50 text-amber-300 text-xs font-semibold disabled:opacity-35">
+              <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18.84 12.25l1.72-1.71a4.5 4.5 0 0 0-6.36-6.36l-1.72 1.71"/><path d="M5.17 11.75l-1.71 1.71a4.5 4.5 0 0 0 6.36 6.36l1.71-1.71"/><line x1="8" y1="2" x2="8" y2="5"/><line x1="2" y1="8" x2="5" y2="8"/><line x1="16" y1="19" x2="16" y2="22"/><line x1="19" y1="16" x2="22" y2="16"/></svg>
+              <span>Disconnect</span>
+            </button>
+          </div>
+
+          <!-- Parametric Flextrack Editor -->
+          <div id="flextrack-editor" class="hidden flex flex-col gap-1.5 pt-1.5 border-t border-slate-800">
+            <div class="flex items-center justify-between gap-2 text-[11px]">
+              <span class="font-mono font-bold text-cyan-300">FLEXTRACK SHAPE</span>
+              <button id="btn-flex-bridge" class="px-2 py-0.5 rounded bg-cyan-500/20 border border-cyan-500/40 text-cyan-300 font-semibold hover:bg-cyan-500/30">
+                Auto-Bridge to Open Port
+              </button>
+            </div>
+            <div class="grid grid-cols-2 gap-2">
+              <label class="flex flex-col gap-0.5 text-[10px] font-mono text-slate-400">
+                <div class="flex justify-between">
+                  <span>Length</span>
+                  <span id="flex-len-val" class="text-amber-300 font-bold">450 mm</span>
+                </div>
+                <input id="inp-flex-len" type="range" min="30" max="914" step="1" value="450" class="accent-amber-500 h-1.5 bg-slate-800 rounded-lg cursor-pointer" />
+              </label>
+              <label class="flex flex-col gap-0.5 text-[10px] font-mono text-slate-400">
+                <div class="flex justify-between">
+                  <span>Bend Angle</span>
+                  <span id="flex-bend-val" class="text-cyan-300 font-bold">0°</span>
+                </div>
+                <input id="inp-flex-bend" type="range" min="-90" max="90" step="1" value="0" class="accent-cyan-400 h-1.5 bg-slate-800 rounded-lg cursor-pointer" />
+              </label>
+            </div>
+          </div>
+        </div>
+
+        <!-- Polygon Boundary / Section Controls -->
+        <div id="poly-sel-controls" class="hidden flex items-center justify-between gap-2">
+          <div class="min-w-0 flex-1">
+            <input id="inp-poly-name" type="text" class="w-full px-2 py-1 rounded-lg bg-slate-950 border border-slate-700 text-xs font-bold text-white" placeholder="Polygon name..." />
+            <div id="poly-metrics" class="text-[11px] font-mono text-emerald-300 mt-0.5">Area: 0 m² • Tap edge label to edit</div>
+          </div>
+          <button id="btn-poly-delete" class="px-3 py-2 rounded-xl bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 text-xs font-semibold shrink-0">Delete</button>
+        </div>
+      </div>
+
+      <!-- Quick Favourites Floating Strip -->
+      <div id="quick-fav-strip" class="hidden absolute bottom-3 left-3 right-3 z-10 flex items-center gap-1.5 overflow-x-auto h-scroll py-1 px-1.5 rounded-xl bg-forge-900/85 backdrop-blur-md border border-slate-800/90 shadow-lg">
+        <span class="text-[10px] font-mono uppercase text-amber-400 px-1.5 shrink-0">★ Quick</span>
+        <div id="quick-fav-items" class="flex items-center gap-1.5"></div>
+      </div>
+
+      <!-- Inline Edge Dimension Editor Popover -->
+      <div id="edge-dim-popover" class="hidden fixed z-40 p-2 rounded-xl bg-forge-900/95 backdrop-blur-md border border-amber-500 shadow-2xl flex items-center gap-1.5 -translate-x-1/2 -translate-y-1/2">
+        <span class="text-[10px] font-mono text-slate-400">Edge:</span>
+        <input id="inp-edge-len" type="number" step="0.1" min="1" class="w-20 px-2 py-1 rounded-lg bg-slate-950 border border-slate-700 text-xs font-mono text-amber-300 font-bold" />
+        <span id="edge-dim-unit" class="text-[10px] font-mono text-slate-400">mm</span>
+        <button id="btn-edge-apply" class="px-2 py-1 rounded-lg bg-emerald-500 text-slate-950 text-xs font-bold">✓</button>
+        <button id="btn-edge-cancel" class="px-2 py-1 rounded-lg bg-slate-800 text-slate-300 text-xs">✕</button>
+      </div>
+    </main>
+
+    <!-- Bottom Sheet Hierarchical Track Drawer -->
+    <section id="bottom-drawer" class="z-30 flex flex-col bg-forge-900 border-t border-slate-700/90 rounded-t-2xl shadow-[0_-10px_30px_rgba(0,0,0,0.6)] shrink-0" style="height: 38vh;">
+      <div class="flex flex-col border-b border-slate-800 shrink-0">
+        <div id="drawer-drag-handle" class="w-full py-2 flex items-center justify-center cursor-ns-resize touch-none group" title="Drag up or down to resize drawer">
+          <div class="w-12 h-1.5 rounded-full bg-slate-600 group-hover:bg-amber-400 group-active:bg-amber-400 transition"></div>
+        </div>
+        <div class="flex items-center justify-between px-2.5 pb-1.5 gap-1">
+          <div class="flex items-center gap-1">
+            <button data-tab="catalog" title="Track Directory" aria-label="Track Directory" class="drawer-tab p-2 rounded-lg bg-amber-500 text-slate-950 transition">
+              <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+            </button>
+            <button data-tab="favourites" title="Favourites" aria-label="Favourites" class="drawer-tab relative p-2 rounded-lg text-slate-300 hover:bg-slate-800 transition">
+              <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+              <span id="fav-count" class="absolute -top-0.5 -right-0.5 text-[9px] font-mono px-1 rounded-full bg-slate-800 text-amber-400 border border-slate-700">0</span>
+            </button>
+            <button data-tab="recent" title="Recent Pieces" aria-label="Recent Pieces" class="drawer-tab p-2 rounded-lg text-slate-300 hover:bg-slate-800 transition">
+              <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15 15"/></svg>
+            </button>
+            <button data-tab="sections" title="Boards, Sections &amp; Parts List" aria-label="Boards, Sections &amp; Parts List" class="drawer-tab p-2 rounded-lg text-slate-300 hover:bg-slate-800 transition">
+              <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+            </button>
+          </div>
+
+          <div class="flex items-center gap-1.5">
+            <span id="drawer-active-scale-pill" class="text-[11px] font-mono font-bold px-2 py-1 rounded-lg bg-slate-800/90 text-amber-400 border border-slate-700/80">OO9</span>
+            <button id="btn-toggle-filters" title="Show / Hide Catalog Filters" aria-label="Toggle Filters" class="p-2 rounded-lg bg-amber-500 text-slate-950 border border-amber-400 transition">
+              <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- TAB 1: Hierarchical Track Catalog -->
+      <div id="tab-catalog" class="flex-1 flex flex-col min-h-0">
+        <div id="catalog-filters-panel" class="flex flex-col shrink-0">
+          <div class="flex items-center gap-1.5 px-2.5 py-1.5 bg-forge-950/60 border-b border-slate-800/80 shrink-0 overflow-x-auto h-scroll">
+            <div id="scale-pills" class="flex items-center gap-1 shrink-0"></div>
+            <div class="relative flex-1 min-w-[95px]">
+              <input id="catalog-search" type="text" placeholder="SKU, ST-401, SLE383F..." class="w-full pl-7 pr-2 py-1 rounded-lg bg-slate-800/90 border border-slate-700 text-xs text-white placeholder-slate-400 focus:outline-none focus:border-amber-500" />
+              <svg class="w-3.5 h-3.5 text-slate-400 absolute left-2 top-1/2 -translate-y-1/2" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+            </div>
+          </div>
+
+          <div id="manufacturer-pills" class="flex items-center gap-1.5 px-2.5 py-1.5 overflow-x-auto h-scroll border-b border-slate-800/70 shrink-0"></div>
+          <div id="category-pills" class="flex items-center gap-1.5 px-2.5 py-1.5 overflow-x-auto h-scroll border-b border-slate-800/70 shrink-0"></div>
+        </div>
+
+        <div id="catalog-grid" class="flex-1 overflow-y-auto drawer-scroll p-2.5 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2 content-start"></div>
+      </div>
+
+      <!-- TAB 2: Favourites -->
+      <div id="tab-favourites" class="hidden flex-1 overflow-y-auto drawer-scroll p-2.5 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2 content-start"></div>
+
+      <!-- TAB 3: Recent -->
+      <div id="tab-recent" class="hidden flex-1 overflow-y-auto drawer-scroll p-2.5 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2 content-start"></div>
+
+      <!-- TAB 4: Sections, Boundaries & Bill of Materials -->
+      <div id="tab-sections" class="hidden flex-1 overflow-y-auto drawer-scroll p-3 space-y-3 bg-forge-900">
+        <div class="flex flex-wrap items-center justify-between gap-2">
+          <div class="flex items-center gap-1.5">
+            <select id="bom-scope-select" class="px-2.5 py-1.5 rounded-lg bg-slate-800 border border-slate-700 text-xs font-semibold text-white max-w-[175px]">
+              <option value="ALL">Entire Layout</option>
+            </select>
+            <button id="btn-bom-add-board" class="px-2.5 py-1.5 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/40 text-xs font-semibold text-emerald-300">+ Board</button>
+          </div>
+          <div class="flex items-center gap-1.5">
+            <button id="btn-export-pdf" class="px-2.5 py-1.5 rounded-lg bg-rose-500/20 hover:bg-rose-500/30 border border-rose-500/40 text-xs font-semibold text-rose-300">PDF</button>
+            <button id="btn-export-csv" class="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs font-semibold text-cyan-300">CSV</button>
+            <button id="btn-export-json" class="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs font-semibold text-amber-300">JSON</button>
+            <button id="btn-bom-fullscreen" title="Toggle Full Screen Parts List" class="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200">
+              <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>
+            </button>
+          </div>
+        </div>
+
+        <div id="polygons-summary-list" class="grid grid-cols-1 sm:grid-cols-2 gap-2"></div>
+
+        <div class="rounded-xl border border-slate-800 overflow-hidden bg-forge-950/60">
+          <div class="px-3 py-2 bg-slate-900/90 border-b border-slate-800 flex items-center justify-between">
+            <span class="text-xs font-bold text-slate-200">Track Inventory &amp; Parts List</span>
+            <span id="bom-totals" class="text-[11px] font-mono text-amber-400">0 pcs • 0 mm</span>
+          </div>
+          <div id="bom-table-body" class="divide-y divide-slate-800/80 text-xs"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Drag Ghost Floating Card -->
+    <div id="drag-ghost" class="hidden fixed z-50 pointer-events-none px-3 py-1.5 rounded-xl bg-amber-500 text-slate-950 font-bold text-xs shadow-2xl border-2 border-white flex items-center gap-2 -translate-x-1/2 -translate-y-[140%]">
+      <span id="drag-ghost-sku" class="font-mono">ST-401</span>
+      <span id="drag-ghost-name" class="truncate max-w-[140px]">Straight</span>
+    </div>
+
+    <!-- Modal: Insert Standard Shape Board -->
+    <div id="shape-board-modal" class="hidden fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
+      <div class="w-full max-w-sm rounded-2xl bg-forge-900 border border-slate-700 shadow-2xl overflow-hidden flex flex-col">
+        <div class="px-4 py-3 border-b border-slate-800 flex items-center justify-between">
+          <h2 class="text-sm font-bold text-white">Insert Standard Shape Board</h2>
+          <button id="btn-close-shape-modal" class="p-1.5 rounded-lg bg-slate-800 text-slate-300 hover:text-white">✕</button>
+        </div>
+        <div class="p-4 space-y-3 text-xs">
+          <div>
+            <label class="block text-[11px] font-mono uppercase text-slate-400 mb-1">Board Shape</label>
+            <div class="grid grid-cols-2 gap-1.5">
+              <button data-shape="rect" class="shape-type-btn py-2 px-2.5 rounded-xl bg-amber-500 text-slate-950 font-bold">Rectangle</button>
+              <button data-shape="l-shape" class="shape-type-btn py-2 px-2.5 rounded-xl bg-slate-800 text-slate-300 font-semibold">L-Shape</button>
+              <button data-shape="u-shape" class="shape-type-btn py-2 px-2.5 rounded-xl bg-slate-800 text-slate-300 font-semibold">U-Shape</button>
+              <button data-shape="oval" class="shape-type-btn py-2 px-2.5 rounded-xl bg-slate-800 text-slate-300 font-semibold">Rounded Table</button>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-2 gap-2">
+            <div>
+              <label class="block text-[11px] text-slate-400 mb-1">Role</label>
+              <select id="shape-role" class="w-full px-2.5 py-1.5 rounded-lg bg-slate-800 border border-slate-700 text-white font-semibold">
+                <option value="boundary">Baseboard Boundary</option>
+                <option value="section">Section Zone</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-[11px] text-slate-400 mb-1">Name</label>
+              <input id="shape-name" type="text" value="Ravenglass Board" class="w-full px-2.5 py-1.5 rounded-lg bg-slate-950 border border-slate-700 text-white" />
+            </div>
+          </div>
+
+          <div id="shape-dims-fields" class="grid grid-cols-2 gap-2 pt-1">
+            <div>
+              <label class="block text-[11px] text-slate-400 mb-1">Outer Width (<span class="shape-unit-lbl">mm</span>)</label>
+              <input id="inp-shape-w" type="number" value="1800" class="w-full px-2.5 py-1.5 rounded-lg bg-slate-950 border border-slate-700 font-mono text-amber-300" />
+            </div>
+            <div>
+              <label class="block text-[11px] text-slate-400 mb-1">Outer Depth (<span class="shape-unit-lbl">mm</span>)</label>
+              <input id="inp-shape-d" type="number" value="850" class="w-full px-2.5 py-1.5 rounded-lg bg-slate-950 border border-slate-700 font-mono text-amber-300" />
+            </div>
+            <div id="field-wing-w" class="hidden">
+              <label class="block text-[11px] text-slate-400 mb-1">Wing Width (<span class="shape-unit-lbl">mm</span>)</label>
+              <input id="inp-shape-ww" type="number" value="750" class="w-full px-2.5 py-1.5 rounded-lg bg-slate-950 border border-slate-700 font-mono text-cyan-300" />
+            </div>
+            <div id="field-wing-d" class="hidden">
+              <label class="block text-[11px] text-slate-400 mb-1">Bridge Depth (<span class="shape-unit-lbl">mm</span>)</label>
+              <input id="inp-shape-wd" type="number" value="550" class="w-full px-2.5 py-1.5 rounded-lg bg-slate-950 border border-slate-700 font-mono text-cyan-300" />
+            </div>
+          </div>
+
+          <button id="btn-insert-shape-board" class="w-full py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs shadow-lg mt-2">
+            Insert Board onto Canvas
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal: Presets, Layouts & Import/Export -->
+    <div id="layouts-modal" class="hidden fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
+      <div class="w-full max-w-md max-h-[85vh] rounded-2xl bg-forge-900 border border-slate-700 shadow-2xl flex flex-col overflow-hidden">
+        <div class="px-4 py-3 border-b border-slate-800 flex items-center justify-between">
+          <h2 class="text-sm font-bold text-white">Layouts &amp; Starter Presets</h2>
+          <button id="btn-close-layouts-modal" class="p-1.5 rounded-lg bg-slate-800 text-slate-300 hover:text-white">✕</button>
+        </div>
+        <div class="p-4 overflow-y-auto drawer-scroll space-y-4">
+          <div>
+            <label class="block text-[11px] font-mono uppercase text-slate-400 mb-1">Layout Title</label>
+            <div class="flex gap-2">
+              <input id="inp-layout-title" type="text" class="flex-1 px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-xs text-white" />
+              <button id="btn-save-title" class="px-3 py-2 rounded-xl bg-amber-500 text-slate-950 font-bold text-xs">Save</button>
+            </div>
+          </div>
+
+          <div>
+            <div class="text-[11px] font-mono uppercase text-slate-400 mb-2">Starter Layouts by Scale</div>
+            <div class="space-y-2">
+              <button data-preset="oo9-ravenglass" class="preset-btn w-full text-left p-3 rounded-xl bg-slate-800/80 hover:bg-slate-800 border border-amber-500/40 transition">
+                <div class="flex items-center justify-between">
+                  <span class="text-xs font-bold text-amber-400">OO9 • Ravenglass &amp; Murthwaite Depot</span>
+                  <span class="text-[10px] font-mono px-1.5 py-0.5 rounded bg-slate-900 text-emerald-300">1:76 • 9mm</span>
+                </div>
+                <p class="text-[11px] text-slate-400 mt-1">Station running roads, turntable throat &amp; shed sidings with board &amp; depot sections.</p>
+              </button>
+              <button data-preset="n-peco" class="preset-btn w-full text-left p-3 rounded-xl bg-slate-800/80 hover:bg-slate-800 border border-slate-700 transition">
+                <div class="flex items-center justify-between">
+                  <span class="text-xs font-bold text-cyan-400">N Gauge • PECO Setrack &amp; Streamline Loop</span>
+                  <span class="text-[10px] font-mono px-1.5 py-0.5 rounded bg-slate-900 text-slate-300">1:148 / 1:160</span>
+                </div>
+                <p class="text-[11px] text-slate-400 mt-1">Compact 9mm loop with ST-5/ST-6 points and baseboard boundary.</p>
+              </button>
+              <button data-preset="oo-oval" class="preset-btn w-full text-left p-3 rounded-xl bg-slate-800/80 hover:bg-slate-800 border border-slate-700 transition">
+                <div class="flex items-center justify-between">
+                  <span class="text-xs font-bold text-amber-300">OO/HO • Classic Oval Mainline</span>
+                  <span class="text-[10px] font-mono px-1.5 py-0.5 rounded bg-slate-900 text-slate-300">1:76 / 1:87</span>
+                </div>
+                <p class="text-[11px] text-slate-400 mt-1">R1 loop with straight run and baseboard boundary.</p>
+              </button>
+              <button data-preset="tt-hornby" class="preset-btn w-full text-left p-3 rounded-xl bg-slate-800/80 hover:bg-slate-800 border border-slate-700 transition">
+                <div class="flex items-center justify-between">
+                  <span class="text-xs font-bold text-purple-400">TT Scale • 12mm Gauge Oval</span>
+                  <span class="text-[10px] font-mono px-1.5 py-0.5 rounded bg-slate-900 text-slate-300">1:120</span>
+                </div>
+                <p class="text-[11px] text-slate-400 mt-1">Compact TT oval with baseboard boundary.</p>
+              </button>
+              <button data-preset="z-marklin" class="preset-btn w-full text-left p-3 rounded-xl bg-slate-800/80 hover:bg-slate-800 border border-slate-700 transition">
+                <div class="flex items-center justify-between">
+                  <span class="text-xs font-bold text-emerald-400">Z Scale • 6.5mm Briefcase Loop</span>
+                  <span class="text-[10px] font-mono px-1.5 py-0.5 rounded bg-slate-900 text-slate-300">1:220</span>
+                </div>
+                <p class="text-[11px] text-slate-400 mt-1">Small-footprint Z loop inside a briefcase board.</p>
+              </button>
+              <button data-preset="o-lionel" class="preset-btn w-full text-left p-3 rounded-xl bg-slate-800/80 hover:bg-slate-800 border border-slate-700 transition">
+                <div class="flex items-center justify-between">
+                  <span class="text-xs font-bold text-orange-400">O Scale • O36 Loop</span>
+                  <span class="text-[10px] font-mono px-1.5 py-0.5 rounded bg-slate-900 text-slate-300">1:48</span>
+                </div>
+                <p class="text-[11px] text-slate-400 mt-1">O36 curve oval with straight sections on a baseboard.</p>
+              </button>
+            </div>
+          </div>
+
+          <div class="pt-2 border-t border-slate-800 flex flex-wrap items-center justify-between gap-2">
+            <label class="px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-cyan-300 cursor-pointer">
+              Import JSON
+              <input id="inp-import-json" type="file" accept=".json,application/json" class="hidden" />
+            </label>
+            <button id="btn-clear-layout" class="px-3 py-2 rounded-xl bg-rose-500/20 hover:bg-rose-500/30 text-xs font-semibold text-rose-300">
+              Clear Canvas
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+  (() => {
+    "use strict";
+
+    // Register inline PWA Manifest & Service Worker safely inside try/catch blocks
+    try {
+      const manifest = {
+        name: "RailForge — Model Railway Layout PWA",
+        short_name: "RailForge",
+        start_url: ".",
+        display: "standalone",
+        background_color: "#080d18",
+        theme_color: "#0f172a",
+        icons: [
+          {
+            src: "data:image/svg+xml," + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" rx="14" fill="#0f172a"/><path d="M12 44h40M17 44l5-22h20l5 22M24 22v-7h16v7M20 52h24" stroke="#f59e0b" stroke-width="4" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>'),
+            sizes: "64x64",
+            type: "image/svg+xml"
+          }
+        ]
+      };
+      const mBlob = new Blob([JSON.stringify(manifest)], { type: "application/manifest+json" });
+      const mLink = document.createElement("link");
+      mLink.rel = "manifest";
+      mLink.href = URL.createObjectURL(mBlob);
+      document.head.appendChild(mLink);
+
+      if ("serviceWorker" in navigator && (location.protocol === "https:" || location.hostname === "localhost")) {
+        const swCode = `
+          const CACHE = "railforge-oo9-v1";
+          self.addEventListener("install", e => {
+            e.waitUntil(caches.open(CACHE).then(c => c.addAll(["./"])).catch(() => {}));
+            self.skipWaiting();
+          });
+          self.addEventListener("activate", e => {
+            e.waitUntil(caches.keys().then(keys => Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k)))));
+            self.clients.claim();
+          });
+          self.addEventListener("fetch", e => {
+            if (e.request.method !== "GET") return;
+            e.respondWith(caches.match(e.request).then(res => res || fetch(e.request).catch(() => res)));
+          });
+        `;
+        const swBlob = new Blob([swCode], { type: "application/javascript" });
+        navigator.serviceWorker.register(URL.createObjectURL(swBlob)).catch(() => {});
+      }
+      if (window.matchMedia("(display-mode: standalone)").matches || navigator.standalone) {
+        document.getElementById("pwa-badge")?.classList.remove("hidden");
+      }
+    } catch (_) {}
+
+    // -------------------------------------------------------------------------
+    // 1. GEOMETRY & COMPREHENSIVE TRACK CATALOG (OO9, N, Z, TT, OO/HO, O)
+    // -------------------------------------------------------------------------
+    const DEG2RAD = Math.PI / 180;
+    const RAD2DEG = 180 / Math.PI;
+
+    function normAngle(deg) {
+      let a = deg % 360;
+      if (a > 180) a -= 360;
+      if (a <= -180) a += 360;
+      return a;
+    }
+
+    function rotatePt(x, y, deg) {
+      const r = deg * DEG2RAD;
+      const c = Math.cos(r);
+      const s = Math.sin(r);
+      return { x: x * c - y * s, y: x * s + y * c };
+    }
+
+    function makeStraight(meta, lengthMm) {
+      return {
+        ...meta,
+        category: "straight",
+        lengthMm,
+        arcDeg: 0,
+        ports: [
+          { id: "p0", x: 0, y: 0, angleDeg: 180, kind: "standard" },
+          { id: "p1", x: lengthMm, y: 0, angleDeg: 0, kind: "standard" }
+        ],
+        segments: [{ type: "line", x1: 0, y1: 0, x2: lengthMm, y2: 0 }]
+      };
+    }
+
+    function makeCurve(meta, radiusMm, arcDeg) {
+      const rad = arcDeg * DEG2RAD;
+      const endX = radiusMm * Math.sin(rad);
+      const endY = radiusMm * (1 - Math.cos(rad));
+      const chordLen = radiusMm * rad;
+      return {
+        ...meta,
+        category: "curve",
+        radiusMm,
+        arcDeg,
+        lengthMm: chordLen,
+        ports: [
+          { id: "p0", x: 0, y: 0, angleDeg: 180, kind: "standard" },
+          { id: "p1", x: endX, y: endY, angleDeg: normAngle(arcDeg), kind: "standard" }
+        ],
+        segments: [{ type: "arc", cx: 0, cy: radiusMm, r: radiusMm, startDeg: -90, endDeg: -90 + arcDeg }]
+      };
+    }
+
+    function makeTurnout(meta, lengthMm, radiusMm, arcDeg, dir) {
+      const sign = dir === "left" ? -1 : 1;
+      const rad = arcDeg * DEG2RAD;
+      const divX = radiusMm * Math.sin(rad);
+      const divY = sign * radiusMm * (1 - Math.cos(rad));
+      const divAngle = normAngle(sign * arcDeg);
+      const divSeg = sign > 0
+        ? { type: "arc", cx: 0, cy: radiusMm, r: radiusMm, startDeg: -90, endDeg: -90 + arcDeg }
+        : { type: "arc", cx: 0, cy: -radiusMm, r: radiusMm, startDeg: 90 - arcDeg, endDeg: 90 };
+
+      return {
+        ...meta,
+        category: "turnout",
+        lengthMm,
+        radiusMm,
+        arcDeg,
+        ports: [
+          { id: "p0", x: 0, y: 0, angleDeg: 180, kind: "standard" },
+          { id: "p1", x: lengthMm, y: 0, angleDeg: 0, kind: "standard" },
+          { id: "p2", x: divX, y: divY, angleDeg: divAngle, kind: "diverging" }
+        ],
+        segments: [
+          { type: "line", x1: 0, y1: 0, x2: lengthMm, y2: 0 },
+          divSeg
+        ]
+      };
+    }
+
+    function makeCurvedTurnout(meta, lengthMm, outerRadiusMm, innerRadiusMm, arcDeg, dir) {
+      const sign = dir === "left" ? -1 : 1;
+      const rad = arcDeg * DEG2RAD;
+      const oX = outerRadiusMm * Math.sin(rad);
+      const oY = sign * outerRadiusMm * (1 - Math.cos(rad));
+      const iX = innerRadiusMm * Math.sin(rad);
+      const iY = sign * innerRadiusMm * (1 - Math.cos(rad));
+      const oSeg = sign > 0
+        ? { type: "arc", cx: 0, cy: outerRadiusMm, r: outerRadiusMm, startDeg: -90, endDeg: -90 + arcDeg }
+        : { type: "arc", cx: 0, cy: -outerRadiusMm, r: outerRadiusMm, startDeg: 90 - arcDeg, endDeg: 90 };
+      const iSeg = sign > 0
+        ? { type: "arc", cx: 0, cy: innerRadiusMm, r: innerRadiusMm, startDeg: -90, endDeg: -90 + arcDeg }
+        : { type: "arc", cx: 0, cy: -innerRadiusMm, r: innerRadiusMm, startDeg: 90 - arcDeg, endDeg: 90 };
+
+      return {
+        ...meta,
+        category: "turnout",
+        lengthMm,
+        radiusMm: innerRadiusMm,
+        arcDeg,
+        ports: [
+          { id: "p0", x: 0, y: 0, angleDeg: 180, kind: "standard" },
+          { id: "p1", x: oX, y: oY, angleDeg: normAngle(sign * arcDeg), kind: "standard" },
+          { id: "p2", x: iX, y: iY, angleDeg: normAngle(sign * arcDeg), kind: "diverging" }
+        ],
+        segments: [oSeg, iSeg]
+      };
+    }
+
+    function makeYTurnout(meta, lengthMm, radiusMm, halfArcDeg) {
+      const rad = halfArcDeg * DEG2RAD;
+      const dx = radiusMm * Math.sin(rad);
+      const dy = radiusMm * (1 - Math.cos(rad));
+      return {
+        ...meta,
+        category: "turnout",
+        lengthMm,
+        radiusMm,
+        arcDeg: halfArcDeg * 2,
+        ports: [
+          { id: "p0", x: 0, y: 0, angleDeg: 180, kind: "standard" },
+          { id: "p1", x: dx, y: dy, angleDeg: normAngle(halfArcDeg), kind: "diverging" },
+          { id: "p2", x: dx, y: -dy, angleDeg: normAngle(-halfArcDeg), kind: "diverging" }
+        ],
+        segments: [
+          { type: "arc", cx: 0, cy: radiusMm, r: radiusMm, startDeg: -90, endDeg: -90 + halfArcDeg },
+          { type: "arc", cx: 0, cy: -radiusMm, r: radiusMm, startDeg: 90 - halfArcDeg, endDeg: 90 }
+        ]
+      };
+    }
+
+    function makeThreeWayTurnout(meta, lengthMm, radiusMm, arcDeg) {
+      const rad = arcDeg * DEG2RAD;
+      const dx = radiusMm * Math.sin(rad);
+      const dy = radiusMm * (1 - Math.cos(rad));
+      return {
+        ...meta,
+        category: "turnout",
+        lengthMm,
+        radiusMm,
+        arcDeg,
+        ports: [
+          { id: "p0", x: 0, y: 0, angleDeg: 180, kind: "standard" },
+          { id: "p1", x: lengthMm, y: 0, angleDeg: 0, kind: "standard" },
+          { id: "p2", x: dx, y: -dy, angleDeg: normAngle(-arcDeg), kind: "diverging" },
+          { id: "p3", x: dx, y: dy, angleDeg: normAngle(arcDeg), kind: "diverging" }
+        ],
+        segments: [
+          { type: "line", x1: 0, y1: 0, x2: lengthMm, y2: 0 },
+          { type: "arc", cx: 0, cy: -radiusMm, r: radiusMm, startDeg: 90 - arcDeg, endDeg: 90 },
+          { type: "arc", cx: 0, cy: radiusMm, r: radiusMm, startDeg: -90, endDeg: -90 + arcDeg }
+        ]
+      };
+    }
+
+    function makeSingleSlip(meta, lengthMm, slipAngleDeg, dir) {
+      const sign = dir === "left" ? -1 : 1;
+      const rad = slipAngleDeg * DEG2RAD;
+      const dx = lengthMm;
+      const dy = sign * lengthMm * Math.tan(rad);
+      return {
+        ...meta,
+        category: "turnout",
+        lengthMm,
+        arcDeg: slipAngleDeg,
+        ports: [
+          { id: "p0", x: 0, y: 0, angleDeg: 180, kind: "standard" },
+          { id: "p1", x: dx, y: 0, angleDeg: 0, kind: "standard" },
+          { id: "p2", x: dx, y: dy, angleDeg: normAngle(sign * slipAngleDeg), kind: "diverging" }
+        ],
+        segments: [
+          { type: "line", x1: 0, y1: 0, x2: dx, y2: 0 },
+          { type: "line", x1: 0, y1: 0, x2: dx, y2: dy }
+        ]
+      };
+    }
+
+    function makeScissorsCrossover(meta, lengthMm, trackSpacingMm, angleDeg) {
+      const rad = angleDeg * DEG2RAD;
+      const dx = trackSpacingMm / Math.tan(rad);
+      return {
+        ...meta,
+        category: "turnout",
+        lengthMm,
+        arcDeg: angleDeg,
+        ports: [
+          { id: "p0", x: 0, y: 0, angleDeg: 180, kind: "standard" },
+          { id: "p1", x: lengthMm, y: 0, angleDeg: 0, kind: "standard" },
+          { id: "p2", x: 0, y: trackSpacingMm, angleDeg: 180, kind: "standard" },
+          { id: "p3", x: lengthMm, y: trackSpacingMm, angleDeg: 0, kind: "standard" }
+        ],
+        segments: [
+          { type: "line", x1: 0, y1: 0, x2: lengthMm, y2: 0 },
+          { type: "line", x1: 0, y1: trackSpacingMm, x2: lengthMm, y2: trackSpacingMm },
+          { type: "line", x1: 0, y1: 0, x2: Math.min(lengthMm, dx), y2: trackSpacingMm },
+          { type: "line", x1: Math.max(0, lengthMm - dx), y1: 0, x2: lengthMm, y2: trackSpacingMm },
+          { type: "line", x1: 0, y1: trackSpacingMm, x2: Math.min(lengthMm, dx), y2: 0 },
+          { type: "line", x1: Math.max(0, lengthMm - dx), y1: trackSpacingMm, x2: lengthMm, y2: 0 }
+        ]
+      };
+    }
+
+    function makeCrossing(meta, lengthMm, crossAngleDeg, dir = "right") {
+      const sign = dir === "left" ? -1 : 1;
+      const half = lengthMm / 2;
+      const rad = crossAngleDeg * DEG2RAD;
+      const dx = half * Math.cos(rad);
+      const dy = sign * half * Math.sin(rad);
+      return {
+        ...meta,
+        category: "special",
+        lengthMm,
+        arcDeg: crossAngleDeg,
+        ports: [
+          { id: "p0", x: 0, y: 0, angleDeg: 180, kind: "standard" },
+          { id: "p1", x: lengthMm, y: 0, angleDeg: 0, kind: "standard" },
+          { id: "p2", x: half - dx, y: -dy, angleDeg: normAngle(180 - sign * crossAngleDeg), kind: "standard" },
+          { id: "p3", x: half + dx, y: dy, angleDeg: normAngle(sign * crossAngleDeg), kind: "standard" }
+        ],
+        segments: [
+          { type: "line", x1: 0, y1: 0, x2: lengthMm, y2: 0 },
+          { type: "line", x1: half - dx, y1: -dy, x2: half + dx, y2: dy }
+        ]
+      };
+    }
+
+    function makeBuffer(meta, lengthMm) {
+      return {
+        ...meta,
+        category: "special",
+        lengthMm,
+        arcDeg: 0,
+        ports: [{ id: "p0", x: 0, y: 0, angleDeg: 180, kind: "standard" }],
+        segments: [{ type: "line", x1: 0, y1: 0, x2: lengthMm, y2: 0 }]
+      };
+    }
+
+    function makeAccessory(meta, lengthMm) {
+      return {
+        ...meta,
+        category: "accessory",
+        lengthMm,
+        arcDeg: 0,
+        ports: [
+          { id: "p0", x: 0, y: 0, angleDeg: 180, kind: "standard" },
+          { id: "p1", x: lengthMm, y: 0, angleDeg: 0, kind: "standard" }
+        ],
+        segments: [{ type: "line", x1: 0, y1: 0, x2: lengthMm, y2: 0 }]
+      };
+    }
+
+    function makeFlextrack(meta, defaultLengthMm) {
+      return {
+        ...meta,
+        category: "flex",
+        isFlex: true,
+        lengthMm: defaultLengthMm,
+        arcDeg: 0,
+        ports: [
+          { id: "p0", x: 0, y: 0, angleDeg: 180, kind: "standard" },
+          { id: "p1", x: defaultLengthMm, y: 0, angleDeg: 0, kind: "standard" }
+        ],
+        segments: [{ type: "line", x1: 0, y1: 0, x2: defaultLengthMm, y2: 0 }]
+      };
+    }
+
+    const TRACK_CATALOG = [
+      // =====================================================================
+      // OO9 NARROW GAUGE (1:76, 9mm gauge — PECO OO9 Setrack & Streamline)
+      // =====================================================================
+      makeStraight({ sku: "ST-401", scale: "OO9", gaugeMm: 9.0, manufacturer: "PECO OO9", system: "PECO OO9 Setrack (Code 80)", roadbed: false, name: "Setrack Standard Straight" }, 87),
+      makeCurve({ sku: "ST-403", scale: "OO9", gaugeMm: 9.0, manufacturer: "PECO OO9", system: "PECO OO9 Setrack (Code 80)", roadbed: false, name: "Setrack No. 1 Radius Curve 22.5°" }, 228, 22.5),
+      makeTurnout({ sku: "ST-405", scale: "OO9", gaugeMm: 9.0, manufacturer: "PECO OO9", system: "PECO OO9 Setrack (Code 80)", roadbed: false, name: "Setrack No. 1 Radius Turnout RH" }, 87, 228, 22.5, "right"),
+      makeTurnout({ sku: "ST-406", scale: "OO9", gaugeMm: 9.0, manufacturer: "PECO OO9", system: "PECO OO9 Setrack (Code 80)", roadbed: false, name: "Setrack No. 1 Radius Turnout LH" }, 87, 228, 22.5, "left"),
+      makeStraight({ sku: "ST-411", scale: "OO9", gaugeMm: 9.0, manufacturer: "PECO OO9", system: "PECO OO9 Setrack (Code 80)", roadbed: false, name: "Setrack Double Straight" }, 174),
+      makeCurve({ sku: "ST-412", scale: "OO9", gaugeMm: 9.0, manufacturer: "PECO OO9", system: "PECO OO9 Setrack (Code 80)", roadbed: false, name: "Setrack No. 1 Radius Double Curve 45°" }, 228, 45),
+      makeStraight({ sku: "ST-413", scale: "OO9", gaugeMm: 9.0, manufacturer: "PECO OO9", system: "PECO OO9 Setrack (Code 80)", roadbed: false, name: "Setrack Wired Double Straight (Feed)" }, 174),
+      makeBuffer({ sku: "SL-440", scale: "OO9", gaugeMm: 9.0, manufacturer: "PECO OO9", system: "PECO OO9 Setrack (Code 80)", roadbed: false, name: "Narrow Gauge Buffer Stop" }, 35),
+
+      makeFlextrack({ sku: "SL-400", scale: "OO9", gaugeMm: 9.0, manufacturer: "PECO OO9", system: "PECO OO9 Streamline (Code 80)", roadbed: false, name: "Streamline Wooden Sleeper Flexitrack" }, 914),
+      makeFlextrack({ sku: "SL400SINGLE", scale: "OO9", gaugeMm: 9.0, manufacturer: "PECO OO9", system: "PECO OO9 Streamline (Code 80)", roadbed: false, name: "Streamline Wooden Sleeper Flex (Single)" }, 914),
+      makeFlextrack({ sku: "SL-404", scale: "OO9", gaugeMm: 9.0, manufacturer: "PECO OO9", system: "PECO OO9 Streamline (Code 80)", roadbed: false, name: "Streamline Mainline Flexitrack" }, 914),
+      makeFlextrack({ sku: "SL404SINGLE", scale: "OO9", gaugeMm: 9.0, manufacturer: "PECO OO9", system: "PECO OO9 Streamline (Code 80)", roadbed: false, name: "Streamline Mainline Flex (Single)" }, 914),
+      makeTurnout({ sku: "SLE491", scale: "OO9", gaugeMm: 9.0, manufacturer: "PECO OO9", system: "PECO OO9 Streamline (Code 80)", roadbed: false, name: "Streamline Small Radius RH Point" }, 125, 304, 19.5, "right"),
+      makeTurnout({ sku: "SLE492", scale: "OO9", gaugeMm: 9.0, manufacturer: "PECO OO9", system: "PECO OO9 Streamline (Code 80)", roadbed: false, name: "Streamline Small Radius LH Point" }, 125, 304, 19.5, "left"),
+      makeTurnout({ sku: "SLE495", scale: "OO9", gaugeMm: 9.0, manufacturer: "PECO OO9", system: "PECO OO9 Streamline (Code 80)", roadbed: false, name: "Streamline Mainline RH Turnout" }, 143, 457, 14, "right"),
+      makeTurnout({ sku: "SLE496", scale: "OO9", gaugeMm: 9.0, manufacturer: "PECO OO9", system: "PECO OO9 Streamline (Code 80)", roadbed: false, name: "Streamline Mainline LH Turnout" }, 143, 457, 14, "left"),
+      makeYTurnout({ sku: "SLE497", scale: "OO9", gaugeMm: 9.0, manufacturer: "PECO OO9", system: "PECO OO9 Streamline (Code 80)", roadbed: false, name: "Streamline Medium Radius Y Point" }, 111, 457, 11.25),
+      makeAccessory({ sku: "SL-428", scale: "OO9", gaugeMm: 9.0, manufacturer: "PECO OO9", system: "PECO OO9 Streamline (Code 80)", roadbed: false, name: "Dummy Turnout Levers (Yard Detail)" }, 24),
+
+      // =====================================================================
+      // N GAUGE (1:148 / 1:160, 9mm gauge — Full PECO N Setrack & Streamline)
+      // =====================================================================
+      makeStraight({ sku: "ST-1", scale: "N", gaugeMm: 9.0, manufacturer: "PECO N", system: "PECO N Setrack (Code 80)", roadbed: false, name: "Standard Straight (87mm)" }, 87),
+      makeStraight({ sku: "ST-2", scale: "N", gaugeMm: 9.0, manufacturer: "PECO N", system: "PECO N Setrack (Code 80)", roadbed: false, name: "Short Straight (58mm)" }, 58),
+      makeCurve({ sku: "ST-3", scale: "N", gaugeMm: 9.0, manufacturer: "PECO N", system: "PECO N Setrack (Code 80)", roadbed: false, name: "1st Radius Curve 22.5°" }, 228, 22.5),
+      makeCurve({ sku: "ST-4", scale: "N", gaugeMm: 9.0, manufacturer: "PECO N", system: "PECO N Setrack (Code 80)", roadbed: false, name: "1st Radius Half Curve 11.25°" }, 228, 11.25),
+      makeTurnout({ sku: "ST-5", scale: "N", gaugeMm: 9.0, manufacturer: "PECO N", system: "PECO N Setrack (Code 80)", roadbed: false, name: "1st Radius Right Hand Point" }, 87, 228, 22.5, "right"),
+      makeTurnout({ sku: "ST-6", scale: "N", gaugeMm: 9.0, manufacturer: "PECO N", system: "PECO N Setrack (Code 80)", roadbed: false, name: "1st Radius Left Hand Point" }, 87, 228, 22.5, "left"),
+      makeBuffer({ sku: "ST-8", scale: "N", gaugeMm: 9.0, manufacturer: "PECO N", system: "PECO N Setrack (Code 80)", roadbed: false, name: "Sleeper-Built Buffer Stops" }, 35),
+      makeAccessory({ sku: "ST-9", scale: "N", gaugeMm: 9.0, manufacturer: "PECO N", system: "PECO N Setrack (Code 80)", roadbed: false, name: "Track Terminal Clips" }, 20),
+      makeStraight({ sku: "ST-10", scale: "N", gaugeMm: 9.0, manufacturer: "PECO N", system: "PECO N Setrack (Code 80)", roadbed: false, name: "Standard Straight Wired (87mm)" }, 87),
+      makeStraight({ sku: "ST-11", scale: "N", gaugeMm: 9.0, manufacturer: "PECO N", system: "PECO N Setrack (Code 80)", roadbed: false, name: "Double Straight (174mm)" }, 174),
+      makeCurve({ sku: "ST-12", scale: "N", gaugeMm: 9.0, manufacturer: "PECO N", system: "PECO N Setrack (Code 80)", roadbed: false, name: "1st Radius Double Curve 45°" }, 228, 45),
+      makeCurve({ sku: "ST-14", scale: "N", gaugeMm: 9.0, manufacturer: "PECO N", system: "PECO N Setrack (Code 80)", roadbed: false, name: "2nd Radius Curve 22.5°" }, 263.5, 22.5),
+      makeCurve({ sku: "ST-15", scale: "N", gaugeMm: 9.0, manufacturer: "PECO N", system: "PECO N Setrack (Code 80)", roadbed: false, name: "2nd Radius Double Curve 45°" }, 263.5, 45),
+      makeCurve({ sku: "ST-16", scale: "N", gaugeMm: 9.0, manufacturer: "PECO N", system: "PECO N Setrack (Code 80)", roadbed: false, name: "3rd Radius Curve 22.5°" }, 298.5, 22.5),
+      makeCurve({ sku: "ST-17", scale: "N", gaugeMm: 9.0, manufacturer: "PECO N", system: "PECO N Setrack (Code 80)", roadbed: false, name: "3rd Radius Double Curve 45°" }, 298.5, 45),
+      makeCurve({ sku: "ST-18", scale: "N", gaugeMm: 9.0, manufacturer: "PECO N", system: "PECO N Setrack (Code 80)", roadbed: false, name: "4th Radius Curve 22.5°" }, 333.4, 22.5),
+      makeCurve({ sku: "ST-19", scale: "N", gaugeMm: 9.0, manufacturer: "PECO N", system: "PECO N Setrack (Code 80)", roadbed: false, name: "4th Radius Double Curve 45°" }, 333.4, 45),
+      makeCrossing({ sku: "ST-20", scale: "N", gaugeMm: 9.0, manufacturer: "PECO N", system: "PECO N Setrack (Code 80)", roadbed: false, name: "Level Crossing System" }, 87, 90, "right"),
+      makeCurvedTurnout({ sku: "ST-44", scale: "N", gaugeMm: 9.0, manufacturer: "PECO N", system: "PECO N Setrack (Code 80)", roadbed: false, name: "Curved Point Right Hand" }, 132, 298.5, 263.5, 22.5, "right"),
+      makeCurvedTurnout({ sku: "ST-45", scale: "N", gaugeMm: 9.0, manufacturer: "PECO N", system: "PECO N Setrack (Code 80)", roadbed: false, name: "Curved Point Left Hand" }, 132, 298.5, 263.5, 22.5, "left"),
+      makeCrossing({ sku: "ST-50", scale: "N", gaugeMm: 9.0, manufacturer: "PECO N", system: "PECO N Setrack (Code 80)", roadbed: false, name: "Crossing Right Hand" }, 87, 22.5, "right"),
+      makeCrossing({ sku: "ST-51", scale: "N", gaugeMm: 9.0, manufacturer: "PECO N", system: "PECO N Setrack (Code 80)", roadbed: false, name: "Crossing Left Hand" }, 87, 22.5, "left"),
+
+      makeFlextrack({ sku: "SL-300", scale: "N", gaugeMm: 9.0, manufacturer: "PECO N", system: "PECO N Streamline (Code 80 & 55)", roadbed: false, name: "Code 80 Wooden Sleeper Flexitrack (1yd)" }, 914),
+      makeFlextrack({ sku: "SL300SINGLE", scale: "N", gaugeMm: 9.0, manufacturer: "PECO N", system: "PECO N Streamline (Code 80 & 55)", roadbed: false, name: "Code 80 Wooden Sleeper Flex (Single)" }, 914),
+      makeFlextrack({ sku: "SL-302F", scale: "N", gaugeMm: 9.0, manufacturer: "PECO N", system: "PECO N Streamline (Code 80 & 55)", roadbed: false, name: "Code 55 Finescale Flexitrack (1yd)" }, 914),
+      makeAccessory({ sku: "SL-310", scale: "N", gaugeMm: 9.0, manufacturer: "PECO N", system: "PECO N Streamline (Code 80 & 55)", roadbed: false, name: "Code 80 Nickel Silver Rail Joiners" }, 12),
+      makeAccessory({ sku: "SL-311", scale: "N", gaugeMm: 9.0, manufacturer: "PECO N", system: "PECO N Streamline (Code 80 & 55)", roadbed: false, name: "Code 55/80 Insulated Rail Joiners" }, 12),
+      makeAccessory({ sku: "SL-330", scale: "N", gaugeMm: 9.0, manufacturer: "PECO N", system: "PECO N Streamline (Code 80 & 55)", roadbed: false, name: "Track Decoupler" }, 58),
+      makeBuffer({ sku: "SL-340", scale: "N", gaugeMm: 9.0, manufacturer: "PECO N", system: "PECO N Streamline (Code 80 & 55)", roadbed: false, name: "Rail-Built Buffer Stop" }, 35),
+      makeTurnout({ sku: "SL-385", scale: "N", gaugeMm: 9.0, manufacturer: "PECO N", system: "PECO N Streamline (Code 80 & 55)", roadbed: false, name: "Code 80 Insulfrog LH Catch Point" }, 95, 457, 10, "left"),
+      makeCurvedTurnout({ sku: "SL-386", scale: "N", gaugeMm: 9.0, manufacturer: "PECO N", system: "PECO N Streamline (Code 80 & 55)", roadbed: false, name: "Code 80 Curved Double Radius RH Point" }, 160, 914, 457, 8, "right"),
+      makeCurvedTurnout({ sku: "SL-E386", scale: "N", gaugeMm: 9.0, manufacturer: "PECO N", system: "PECO N Streamline (Code 80 & 55)", roadbed: false, name: "Code 80 Electrofrog Curved RH Point" }, 160, 914, 457, 8, "right"),
+      makeCurvedTurnout({ sku: "SL-387", scale: "N", gaugeMm: 9.0, manufacturer: "PECO N", system: "PECO N Streamline (Code 80 & 55)", roadbed: false, name: "Code 80 Curved Double Radius LH Point" }, 160, 914, 457, 8, "left"),
+      makeTurnout({ sku: "SL-388", scale: "N", gaugeMm: 9.0, manufacturer: "PECO N", system: "PECO N Streamline (Code 80 & 55)", roadbed: false, name: "Code 80 Insulfrog Large RH Point" }, 160, 914, 8, "right"),
+      makeTurnout({ sku: "SL-E388", scale: "N", gaugeMm: 9.0, manufacturer: "PECO N", system: "PECO N Streamline (Code 80 & 55)", roadbed: false, name: "Code 80 Electrofrog Large RH Point" }, 160, 914, 8, "right"),
+      makeTurnout({ sku: "SL-E388F", scale: "N", gaugeMm: 9.0, manufacturer: "PECO N", system: "PECO N Streamline (Code 80 & 55)", roadbed: false, name: "Code 55 Electrofrog Large RH Point" }, 160, 914, 8, "right"),
+      makeTurnout({ sku: "SL-389", scale: "N", gaugeMm: 9.0, manufacturer: "PECO N", system: "PECO N Streamline (Code 80 & 55)", roadbed: false, name: "Code 80 Insulfrog Large LH Point" }, 160, 914, 8, "left"),
+      makeTurnout({ sku: "SL-E389", scale: "N", gaugeMm: 9.0, manufacturer: "PECO N", system: "PECO N Streamline (Code 80 & 55)", roadbed: false, name: "Code 80 Electrofrog Large LH Point" }, 160, 914, 8, "left"),
+      makeTurnout({ sku: "SL-E389F", scale: "N", gaugeMm: 9.0, manufacturer: "PECO N", system: "PECO N Streamline (Code 80 & 55)", roadbed: false, name: "Code 55 Electrofrog Large LH Point" }, 160, 914, 8, "left"),
+      makeTurnout({ sku: "SL-E391F", scale: "N", gaugeMm: 9.0, manufacturer: "PECO N", system: "PECO N Streamline (Code 80 & 55)", roadbed: false, name: "Code 55 Electrofrog Small RH Point" }, 112, 304, 15, "right"),
+      makeTurnout({ sku: "SL-E392F", scale: "N", gaugeMm: 9.0, manufacturer: "PECO N", system: "PECO N Streamline (Code 80 & 55)", roadbed: false, name: "Code 55 Electrofrog Small LH Point" }, 112, 304, 15, "left"),
+      makeCrossing({ sku: "SL-393", scale: "N", gaugeMm: 9.0, manufacturer: "PECO N", system: "PECO N Streamline (Code 80 & 55)", roadbed: false, name: "Code 80 Short Crossing" }, 96, 14, "right"),
+      makeCrossing({ sku: "SL-E393F", scale: "N", gaugeMm: 9.0, manufacturer: "PECO N", system: "PECO N Streamline (Code 80 & 55)", roadbed: false, name: "Code 55 Short Crossing" }, 96, 14, "right"),
+      makeCrossing({ sku: "SL-394", scale: "N", gaugeMm: 9.0, manufacturer: "PECO N", system: "PECO N Streamline (Code 80 & 55)", roadbed: false, name: "Code 80 Long Crossing 8°" }, 187, 8, "right"),
+      makeCrossing({ sku: "SL-E394F", scale: "N", gaugeMm: 9.0, manufacturer: "PECO N", system: "PECO N Streamline (Code 80 & 55)", roadbed: false, name: "Code 55 Long Crossing 8°" }, 187, 8, "right"),
+      makeTurnout({ sku: "SL-395", scale: "N", gaugeMm: 9.0, manufacturer: "PECO N", system: "PECO N Streamline (Code 80 & 55)", roadbed: false, name: "Code 80 Insulfrog Medium RH Point" }, 124, 457, 12, "right"),
+      makeTurnout({ sku: "SL-E395", scale: "N", gaugeMm: 9.0, manufacturer: "PECO N", system: "PECO N Streamline (Code 80 & 55)", roadbed: false, name: "Code 80 Electrofrog Medium RH Point" }, 124, 457, 12, "right"),
+      makeTurnout({ sku: "SL-U395F", scale: "N", gaugeMm: 9.0, manufacturer: "PECO N", system: "PECO N Streamline (Code 80 & 55)", roadbed: false, name: "Code 55 Unifrog Medium RH Point" }, 124, 457, 12, "right"),
+      makeTurnout({ sku: "SL-396", scale: "N", gaugeMm: 9.0, manufacturer: "PECO N", system: "PECO N Streamline (Code 80 & 55)", roadbed: false, name: "Code 80 Insulfrog Medium LH Point" }, 124, 457, 12, "left"),
+      makeTurnout({ sku: "SL-E396", scale: "N", gaugeMm: 9.0, manufacturer: "PECO N", system: "PECO N Streamline (Code 80 & 55)", roadbed: false, name: "Code 80 Electrofrog Medium LH Point" }, 124, 457, 12, "left"),
+      makeYTurnout({ sku: "SL-397", scale: "N", gaugeMm: 9.0, manufacturer: "PECO N", system: "PECO N Streamline (Code 80 & 55)", roadbed: false, name: "Code 80 Insulfrog Medium Y Point" }, 111, 457, 11.25),
+      makeYTurnout({ sku: "SL-E397", scale: "N", gaugeMm: 9.0, manufacturer: "PECO N", system: "PECO N Streamline (Code 80 & 55)", roadbed: false, name: "Code 80 Electrofrog Medium Y Point" }, 111, 457, 11.25),
+      makeThreeWayTurnout({ sku: "SL-E399F", scale: "N", gaugeMm: 9.0, manufacturer: "PECO N", system: "PECO N Streamline (Code 80 & 55)", roadbed: false, name: "Code 55 Asymmetric 3-Way Turnout" }, 153, 457, 10),
+      makeSingleSlip({ sku: "SL-E380F", scale: "N", gaugeMm: 9.0, manufacturer: "PECO N", system: "PECO N Streamline (Code 80 & 55)", roadbed: false, name: "Code 55 Finescale Single Slip" }, 154, 10, "right"),
+      makeScissorsCrossover({ sku: "SLE383F", scale: "N", gaugeMm: 9.0, manufacturer: "PECO N", system: "PECO N Streamline (Code 80 & 55)", roadbed: false, name: "Code 55 Medium Scissors Crossover" }, 271, 47.7, 10),
+      makeAccessory({ sku: "PL-82", scale: "N", gaugeMm: 9.0, manufacturer: "PECO N", system: "PECO N Streamline (Code 80 & 55)", roadbed: false, name: "Code 55/80 Power Feed Joiners" }, 16),
+
+      // =====================================================================
+      // Z SCALE (1:220, 6.5mm gauge)
+      // =====================================================================
+      makeStraight({ sku: "8500", scale: "Z", gaugeMm: 6.5, manufacturer: "Märklin Mini-Club", system: "Märklin Z", roadbed: false, name: "Straight 110mm" }, 110),
+      makeCurve({ sku: "8520", scale: "Z", gaugeMm: 6.5, manufacturer: "Märklin Mini-Club", system: "Märklin Z", roadbed: false, name: "R2 Curve R195mm 45°" }, 195, 45),
+      makeTurnout({ sku: "8562", scale: "Z", gaugeMm: 6.5, manufacturer: "Märklin Mini-Club", system: "Märklin Z", roadbed: false, name: "Left Turnout 110mm 13°" }, 110, 490, 13, "left"),
+      makeTurnout({ sku: "8563", scale: "Z", gaugeMm: 6.5, manufacturer: "Märklin Mini-Club", system: "Märklin Z", roadbed: false, name: "Right Turnout 110mm 13°" }, 110, 490, 13, "right"),
+      makeBuffer({ sku: "8991", scale: "Z", gaugeMm: 6.5, manufacturer: "Märklin Mini-Club", system: "Märklin Z", roadbed: false, name: "Buffer Stop 25mm" }, 25),
+      makeFlextrack({ sku: "8594", scale: "Z", gaugeMm: 6.5, manufacturer: "Märklin Mini-Club", system: "Märklin Z", roadbed: false, name: "Z Flextrack (220mm)" }, 220),
+
+      // =====================================================================
+      // TT SCALE (1:120, 12.0mm gauge)
+      // =====================================================================
+      makeStraight({ sku: "TT8001", scale: "TT", gaugeMm: 12.0, manufacturer: "Hornby TT:120", system: "Hornby TT:120", roadbed: false, name: "Standard Straight 166mm" }, 166),
+      makeCurve({ sku: "TT8004", scale: "TT", gaugeMm: 12.0, manufacturer: "Hornby TT:120", system: "Hornby TT:120", roadbed: false, name: "R2 Curve R310mm 30°" }, 310, 30),
+      makeTurnout({ sku: "TT8008", scale: "TT", gaugeMm: 12.0, manufacturer: "Hornby TT:120", system: "Hornby TT:120", roadbed: false, name: "Left Point 166mm 15°" }, 166, 631, 15, "left"),
+      makeTurnout({ sku: "TT8009", scale: "TT", gaugeMm: 12.0, manufacturer: "Hornby TT:120", system: "Hornby TT:120", roadbed: false, name: "Right Point 166mm 15°" }, 166, 631, 15, "right"),
+      makeFlextrack({ sku: "TT8040", scale: "TT", gaugeMm: 12.0, manufacturer: "Hornby TT:120", system: "Hornby TT:120", roadbed: false, name: "TT:120 Flextrack (400mm)" }, 400),
+      makeFlextrack({ sku: "SL-U1200", scale: "TT", gaugeMm: 12.0, manufacturer: "Peco TT", system: "Peco TT:120", roadbed: false, name: "Peco TT Code 55 Flex (450mm)" }, 450),
+
+      // =====================================================================
+      // OO / HO SCALE (1:76.2 / 1:87, 16.5mm gauge)
+      // =====================================================================
+      makeStraight({ sku: "R600", scale: "OO/HO", gaugeMm: 16.5, manufacturer: "Hornby OO", system: "Hornby Setrack", roadbed: false, name: "Standard Straight 168mm" }, 168),
+      makeStraight({ sku: "R601", scale: "OO/HO", gaugeMm: 16.5, manufacturer: "Hornby OO", system: "Hornby Setrack", roadbed: false, name: "Double Straight 335mm" }, 335),
+      makeCurve({ sku: "R604", scale: "OO/HO", gaugeMm: 16.5, manufacturer: "Hornby OO", system: "Hornby Setrack", roadbed: false, name: "R1 Curve R371mm 22.5°" }, 371, 22.5),
+      makeCurve({ sku: "R606", scale: "OO/HO", gaugeMm: 16.5, manufacturer: "Hornby OO", system: "Hornby Setrack", roadbed: false, name: "R2 Curve R438mm 22.5°" }, 438, 22.5),
+      makeTurnout({ sku: "R8072", scale: "OO/HO", gaugeMm: 16.5, manufacturer: "Hornby OO", system: "Hornby Setrack", roadbed: false, name: "Left Standard Point 22.5°" }, 168, 438, 22.5, "left"),
+      makeTurnout({ sku: "R8073", scale: "OO/HO", gaugeMm: 16.5, manufacturer: "Hornby OO", system: "Hornby Setrack", roadbed: false, name: "Right Standard Point 22.5°" }, 168, 438, 22.5, "right"),
+      makeFlextrack({ sku: "R621", scale: "OO/HO", gaugeMm: 16.5, manufacturer: "Hornby OO", system: "Hornby Setrack", roadbed: false, name: "OO/HO Flextrack (450mm)" }, 450),
+      makeFlextrack({ sku: "SL-100", scale: "OO/HO", gaugeMm: 16.5, manufacturer: "Peco OO", system: "Peco OO Setrack", roadbed: false, name: "Code 100 Flextrack (450mm)" }, 450),
+
+      // =====================================================================
+      // O SCALE (1:43.5 / 1:48, 31.75mm / 32mm gauge)
+      // =====================================================================
+      makeStraight({ sku: "6-12014", scale: "O", gaugeMm: 31.75, manufacturer: "Lionel O", system: "Lionel FasTrack", roadbed: true, name: "10\" Straight (254mm)" }, 254),
+      makeCurve({ sku: "6-12015", scale: "O", gaugeMm: 31.75, manufacturer: "Lionel O", system: "Lionel FasTrack", roadbed: true, name: "O36 Curve R457.2mm 45°" }, 457.2, 45),
+      makeTurnout({ sku: "6-12017", scale: "O", gaugeMm: 31.75, manufacturer: "Lionel O", system: "Lionel FasTrack", roadbed: true, name: "Left Manual Switch O36 45°" }, 254, 457.2, 45, "left"),
+      makeFlextrack({ sku: "SL-700BH", scale: "O", gaugeMm: 32.0, manufacturer: "Peco O", system: "Peco O Setrack", roadbed: false, name: "O Flextrack (600mm)" }, 600)
+    ];
+
+    const CATALOG_BY_SKU = new Map(TRACK_CATALOG.map(i => [i.sku, i]));
+
+    function getEffectivePieceGeom(piece) {
+      const base = CATALOG_BY_SKU.get(piece.sku);
+      if (!base) return null;
+      if (!base.isFlex) return base;
+
+      const len = Math.max(25, piece.flexLengthMm || base.lengthMm || 450);
+      const bendDeg = piece.flexBendDeg || 0;
+
+      if (Math.abs(bendDeg) < 0.25) {
+        return {
+          ...base,
+          lengthMm: len,
+          arcDeg: 0,
+          ports: [
+            { id: "p0", x: 0, y: 0, angleDeg: 180, kind: "standard" },
+            { id: "p1", x: len, y: 0, angleDeg: 0, kind: "standard" }
+          ],
+          segments: [{ type: "line", x1: 0, y1: 0, x2: len, y2: 0 }]
+        };
+      }
+
+      const absBend = Math.abs(bendDeg);
+      const rad = absBend * DEG2RAD;
+      const radiusMm = len / rad;
+      const sign = bendDeg > 0 ? 1 : -1;
+      const endX = radiusMm * Math.sin(rad);
+      const endY = sign * radiusMm * (1 - Math.cos(rad));
+      const arcSeg = sign > 0
+        ? { type: "arc", cx: 0, cy: radiusMm, r: radiusMm, startDeg: -90, endDeg: -90 + absBend }
+        : { type: "arc", cx: 0, cy: -radiusMm, r: radiusMm, startDeg: 90 - absBend, endDeg: 90 };
+
+      return {
+        ...base,
+        lengthMm: len,
+        radiusMm,
+        arcDeg: bendDeg,
+        ports: [
+          { id: "p0", x: 0, y: 0, angleDeg: 180, kind: "standard" },
+          { id: "p1", x: endX, y: endY, angleDeg: normAngle(bendDeg), kind: "standard" }
+        ],
+        segments: [arcSeg]
+      };
+    }
+
+    // -------------------------------------------------------------------------
+    // 2. APPLICATION STATE & UNDO/REDO
+    // -------------------------------------------------------------------------
+    const STORAGE_KEY = "railforge_oo9_state_v1";
+    const uid = prefix => `${prefix}_${Math.random().toString(36).slice(2, 9)}`;
+
+    const state = {
+      title: "Ravenglass & Murthwaite OO9",
+      unitSystem: "metric",
+      camera: { panX: 120, panY: 140, zoom: 0.72 },
+      pieces: [],
+      connections: [],
+      polygons: [],
+      draftPolygon: null,
+      favourites: new Set(["ST-401", "ST-403", "SLE495", "SLE496", "SL-400", "SL-440", "SLE383F"]),
+      recent: ["ST-401", "SLE495", "SL-440"],
+      filterScale: "OO9",
+      filterManufacturer: "All",
+      filterCategory: "All",
+      searchQuery: "",
+      activeTool: "select",
+      groupMoveMode: true,
+      snap90Mode: true,
+      showOpenPorts: true,
+      selectedPieceId: null,
+      selectedPolyId: null,
+      drawerTab: "catalog",
+      drawerHeightPx: null,
+      filtersOpen: true,
+      bomFullScreen: false,
+      selectedShapeType: "rect",
+      editingEdge: null,
+      snappedRightAngleCorner: null,
+      dragState: null,
+      catalogDrag: null,
+      undoStack: [],
+      redoStack: []
+    };
+
+    let toastTimer = null;
+    function showToast(msg) {
+      const el = document.getElementById("toast-box");
+      if (!el) return;
+      el.textContent = msg;
+      el.classList.remove("hidden");
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => el.classList.add("hidden"), 2200);
+    }
+
+    function snapshotState() {
+      return JSON.stringify({
+        title: state.title,
+        unitSystem: state.unitSystem,
+        pieces: state.pieces,
+        connections: state.connections,
+        polygons: state.polygons,
+        filterScale: state.filterScale
+      });
+    }
+
+    function pushUndo() {
+      state.undoStack.push(snapshotState());
+      if (state.undoStack.length > 50) state.undoStack.shift();
+      state.redoStack = [];
+      updateUndoRedoButtons();
+    }
+
+    function applySnapshot(raw) {
+      try {
+        const data = JSON.parse(raw);
+        state.title = data.title || "Untitled Layout";
+        state.unitSystem = data.unitSystem || "metric";
+        state.pieces = Array.isArray(data.pieces) ? data.pieces : [];
+        state.connections = Array.isArray(data.connections) ? data.connections : [];
+        state.polygons = Array.isArray(data.polygons) ? data.polygons : [];
+        if (data.filterScale) state.filterScale = data.filterScale;
+        state.selectedPieceId = null;
+        state.selectedPolyId = null;
+        state.draftPolygon = null;
+        document.getElementById("layout-title-display").textContent = state.title;
+        document.getElementById("btn-unit").textContent = state.unitSystem === "metric" ? "mm" : "in";
+        updateUndoRedoButtons();
+        updateHeaderStats();
+        updateSelectionUI();
+        updateCloseGapInspector();
+        renderCatalogFilters();
+        renderCatalogGrid();
+        refreshSectionsTab();
+        saveToLocalStorage();
+        requestRender();
+      } catch (_) {}
+    }
+
+    function undo() {
+      if (!state.undoStack.length) return;
+      state.redoStack.push(snapshotState());
+      applySnapshot(state.undoStack.pop());
+      showToast("Undid action");
+    }
+
+    function redo() {
+      if (!state.redoStack.length) return;
+      state.undoStack.push(snapshotState());
+      applySnapshot(state.redoStack.pop());
+      showToast("Redid action");
+    }
+
+    function updateUndoRedoButtons() {
+      document.getElementById("btn-undo").disabled = state.undoStack.length === 0;
+      document.getElementById("btn-redo").disabled = state.redoStack.length === 0;
+    }
+
+    function saveToLocalStorage() {
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify({
+          title: state.title,
+          unitSystem: state.unitSystem,
+          camera: state.camera,
+          pieces: state.pieces,
+          connections: state.connections,
+          polygons: state.polygons,
+          favourites: [...state.favourites],
+          recent: state.recent,
+          filterScale: state.filterScale
+        }));
+      } catch (_) {}
+    }
+
+    function loadFromLocalStorage() {
+      try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        if (!raw) return false;
+        const d = JSON.parse(raw);
+        if (!Array.isArray(d.pieces)) return false;
+        state.title = d.title || "Ravenglass & Murthwaite OO9";
+        state.unitSystem = d.unitSystem || "metric";
+        if (d.camera && typeof d.camera.zoom === "number") state.camera = d.camera;
+        state.pieces = d.pieces;
+        state.connections = Array.isArray(d.connections) ? d.connections : [];
+        state.polygons = Array.isArray(d.polygons) ? d.polygons : [];
+        if (Array.isArray(d.favourites)) state.favourites = new Set(d.favourites);
+        if (Array.isArray(d.recent)) state.recent = d.recent;
+        if (d.filterScale) state.filterScale = d.filterScale;
+        return true;
+      } catch (_) {
+        return false;
+      }
+    }
+
+    // -------------------------------------------------------------------------
+    // 3. UNIT FORMATTING & POLYGON GEOMETRY
+    // -------------------------------------------------------------------------
+    function formatLength(mm) {
+      if (state.unitSystem === "imperial") {
+        const inches = mm / 25.4;
+        return inches >= 24 ? `${(inches / 12).toFixed(2)} ft` : `${inches.toFixed(1)} in`;
+      }
+      return mm >= 1000 ? `${(mm / 1000).toFixed(2)} m` : `${Math.round(mm * 10) / 10} mm`;
+    }
+
+    function formatArea(mm2) {
+      if (state.unitSystem === "imperial") {
+        return `${(mm2 / (25.4 * 25.4 * 144)).toFixed(2)} sq ft`;
+      }
+      return `${(mm2 / 1_000_000).toFixed(2)} m²`;
+    }
+
+    function polygonAreaMm2(pts) {
+      if (!pts || pts.length < 3) return 0;
+      let sum = 0;
+      for (let i = 0; i < pts.length; i++) {
+        const a = pts[i];
+        const b = pts[(i + 1) % pts.length];
+        sum += a.x * b.y - b.x * a.y;
+      }
+      return Math.abs(sum) * 0.5;
+    }
+
+    function pointInPolygon(pt, pts) {
+      if (!pts || pts.length < 3) return false;
+      let inside = false;
+      for (let i = 0, j = pts.length - 1; i < pts.length; j = i++) {
+        const xi = pts[i].x, yi = pts[i].y;
+        const xj = pts[j].x, yj = pts[j].y;
+        const intersect = ((yi > pt.y) !== (yj > pt.y)) &&
+          (pt.x < ((xj - xi) * (pt.y - yi)) / ((yj - yi) || 1e-9) + xi);
+        if (intersect) inside = !inside;
+      }
+      return inside;
+    }
+
+    // -------------------------------------------------------------------------
+    // 4. TRACK GRAPH, PORT KINEMATICS & AUTO-CONNECT
+    // -------------------------------------------------------------------------
+    function getPieceWorldPorts(piece) {
+      const geom = getEffectivePieceGeom(piece);
+      if (!geom) return [];
+      return geom.ports.map(port => {
+        const rp = rotatePt(port.x, port.y, piece.rotationDeg);
+        return {
+          pieceId: piece.instanceId,
+          portId: port.id,
+          kind: port.kind,
+          x: piece.x + rp.x,
+          y: piece.y + rp.y,
+          angleDeg: normAngle(piece.rotationDeg + port.angleDeg)
+        };
+      });
+    }
+
+    function isPortConnected(pieceId, portId) {
+      return state.connections.some(
+        c => (c.pieceA === pieceId && c.portA === portId) || (c.pieceB === pieceId && c.portB === portId)
+      );
+    }
+
+    function getOpenWorldPorts(excludePieceIds = new Set()) {
+      const open = [];
+      for (const p of state.pieces) {
+        if (excludePieceIds.has(p.instanceId)) continue;
+        for (const wp of getPieceWorldPorts(p)) {
+          if (!isPortConnected(wp.pieceId, wp.portId)) open.push(wp);
+        }
+      }
+      return open;
+    }
+
+    function getConnectedGroup(startPieceId) {
+      const visited = new Set();
+      if (!startPieceId) return visited;
+      const queue = [startPieceId];
+      visited.add(startPieceId);
+      while (queue.length) {
+        const curr = queue.shift();
+        for (const c of state.connections) {
+          if (c.pieceA === curr && !visited.has(c.pieceB)) {
+            visited.add(c.pieceB);
+            queue.push(c.pieceB);
+          } else if (c.pieceB === curr && !visited.has(c.pieceA)) {
+            visited.add(c.pieceA);
+            queue.push(c.pieceA);
+          }
+        }
+      }
+      return visited;
+    }
+
+    function disconnectPiece(pieceId) {
+      const before = state.connections.length;
+      state.connections = state.connections.filter(c => c.pieceA !== pieceId && c.pieceB !== pieceId);
+      return state.connections.length !== before;
+    }
+
+    function findBestSnapForPiece(piece, excludeIds = new Set(), snapDistWorld = 24) {
+      const myPorts = getPieceWorldPorts(piece);
+      const openTargets = getOpenWorldPorts(excludeIds);
+      let best = null;
+      let bestDist = snapDistWorld;
+
+      for (const mp of myPorts) {
+        if (isPortConnected(mp.pieceId, mp.portId)) continue;
+        for (const tp of openTargets) {
+          const d = Math.hypot(tp.x - mp.x, tp.y - mp.y);
+          if (d <= bestDist) {
+            bestDist = d;
+            const targetHeading = normAngle(tp.angleDeg + 180);
+            const deltaRot = normAngle(targetHeading - mp.angleDeg);
+            best = { myPort: mp, targetPort: tp, deltaRot, dist: d };
+          }
+        }
+      }
+      return best;
+    }
+
+    function applySnapToPiece(piece, snap, movingSet = null) {
+      const rotDelta = snap.deltaRot;
+      if (movingSet && movingSet.size > 1) {
+        const pivot = { x: snap.myPort.x, y: snap.myPort.y };
+        for (const id of movingSet) {
+          const p = state.pieces.find(x => x.instanceId === id);
+          if (!p) continue;
+          const rel = rotatePt(p.x - pivot.x, p.y - pivot.y, rotDelta);
+          p.x = pivot.x + rel.x;
+          p.y = pivot.y + rel.y;
+          p.rotationDeg = normAngle(p.rotationDeg + rotDelta);
+        }
+      } else {
+        piece.rotationDeg = normAngle(piece.rotationDeg + rotDelta);
+      }
+
+      const updatedPort = getPieceWorldPorts(piece).find(w => w.portId === snap.myPort.portId);
+      if (updatedPort) {
+        const dx = snap.targetPort.x - updatedPort.x;
+        const dy = snap.targetPort.y - updatedPort.y;
+        if (movingSet && movingSet.size > 1) {
+          for (const id of movingSet) {
+            const p = state.pieces.find(x => x.instanceId === id);
+            if (p) { p.x += dx; p.y += dy; }
+          }
+        } else {
+          piece.x += dx;
+          piece.y += dy;
+        }
+      }
+
+      const exists = state.connections.some(
+        c => (c.pieceA === snap.myPort.pieceId && c.portA === snap.myPort.portId) ||
+             (c.pieceB === snap.myPort.pieceId && c.portB === snap.myPort.portId)
+      );
+      if (!exists) {
+        state.connections.push({
+          id: uid("conn"),
+          pieceA: snap.myPort.pieceId,
+          portA: snap.myPort.portId,
+          pieceB: snap.targetPort.pieceId,
+          portB: snap.targetPort.portId
+        });
+      }
+    }
+
+    function autoConnectAllCoincidentPorts(posTol = 6, angleTol = 20) {
+      for (let i = 0; i < state.pieces.length; i++) {
+        const pA = state.pieces[i];
+        const portsA = getPieceWorldPorts(pA);
+        for (const pa of portsA) {
+          if (isPortConnected(pa.pieceId, pa.portId)) continue;
+          for (let j = i + 1; j < state.pieces.length; j++) {
+            const pB = state.pieces[j];
+            const portsB = getPieceWorldPorts(pB);
+            for (const pb of portsB) {
+              if (isPortConnected(pb.pieceId, pb.portId)) continue;
+              const d = Math.hypot(pa.x - pb.x, pa.y - pb.y);
+              const angDiff = Math.abs(normAngle(normAngle(pb.angleDeg + 180) - pa.angleDeg));
+              if (d <= posTol && angDiff <= angleTol) {
+                state.connections.push({
+                  id: uid("conn"),
+                  pieceA: pa.pieceId,
+                  portA: pa.portId,
+                  pieceB: pb.pieceId,
+                  portB: pb.portId
+                });
+                break;
+              }
+            }
+          }
+        }
+      }
+    }
+
+    function rotateGroupAround(groupIds, center, deltaDeg) {
+      for (const id of groupIds) {
+        const p = state.pieces.find(x => x.instanceId === id);
+        if (!p) continue;
+        const rel = rotatePt(p.x - center.x, p.y - center.y, deltaDeg);
+        p.x = center.x + rel.x;
+        p.y = center.y + rel.y;
+        p.rotationDeg = normAngle(p.rotationDeg + deltaDeg);
+      }
+    }
+
+    function getGroupBoundingCenter(groupIds) {
+      let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+      for (const id of groupIds) {
+        const p = state.pieces.find(x => x.instanceId === id);
+        if (!p) continue;
+        minX = Math.min(minX, p.x);
+        minY = Math.min(minY, p.y);
+        maxX = Math.max(maxX, p.x);
+        maxY = Math.max(maxY, p.y);
+      }
+      if (!isFinite(minX)) return { x: 0, y: 0 };
+      return { x: (minX + maxX) / 2, y: (minY + maxY) / 2 };
+    }
+
+    // -------------------------------------------------------------------------
+    // 5. HIT-TESTING & BOUNDARY CHECKS
+    // -------------------------------------------------------------------------
+    function getPieceSamplePoints(piece) {
+      const item = getEffectivePieceGeom(piece);
+      if (!item) return [{ x: piece.x, y: piece.y }];
+      const pts = getPieceWorldPorts(piece).map(wp => ({ x: wp.x, y: wp.y }));
+      item.segments.forEach(seg => {
+        if (seg.type === "line") {
+          const rp = rotatePt((seg.x1 + seg.x2) / 2, (seg.y1 + seg.y2) / 2, piece.rotationDeg);
+          pts.push({ x: piece.x + rp.x, y: piece.y + rp.y });
+        } else if (seg.type === "arc") {
+          const mid = (seg.startDeg + seg.endDeg) / 2;
+          const rp = rotatePt(seg.cx + seg.r * Math.cos(mid * DEG2RAD), seg.cy + seg.r * Math.sin(mid * DEG2RAD), piece.rotationDeg);
+          pts.push({ x: piece.x + rp.x, y: piece.y + rp.y });
+        }
+      });
+      return pts;
+    }
+
+    function isPieceOutOfBounds(piece) {
+      const boundaries = state.polygons.filter(p => p.role === "boundary" && p.points.length >= 3);
+      if (!boundaries.length) return false;
+      const samples = getPieceSamplePoints(piece);
+      return samples.some(pt => !boundaries.some(b => pointInPolygon(pt, b.points)));
+    }
+
+    function distToSegment(px, py, x1, y1, x2, y2) {
+      const vx = x2 - x1, vy = y2 - y1;
+      const wx = px - x1, wy = py - y1;
+      const len2 = vx * vx + vy * vy;
+      const t = len2 > 0 ? Math.max(0, Math.min(1, (wx * vx + wy * vy) / len2)) : 0;
+      return Math.hypot(px - (x1 + t * vx), py - (y1 + t * vy));
+    }
+
+    function hitTestPiece(worldPt) {
+      const hitRadius = Math.max(16, 18 / state.camera.zoom);
+      for (let i = state.pieces.length - 1; i >= 0; i--) {
+        const piece = state.pieces[i];
+        const item = getEffectivePieceGeom(piece);
+        if (!item) continue;
+        const tol = Math.max(hitRadius, item.gaugeMm * 1.4);
+        for (const seg of item.segments) {
+          if (seg.type === "line") {
+            const a = rotatePt(seg.x1, seg.y1, piece.rotationDeg);
+            const b = rotatePt(seg.x2, seg.y2, piece.rotationDeg);
+            if (distToSegment(worldPt.x, worldPt.y, piece.x + a.x, piece.y + a.y, piece.x + b.x, piece.y + b.y) <= tol) {
+              return piece;
+            }
+          } else if (seg.type === "arc") {
+            const steps = 12;
+            for (let s = 0; s < steps; s++) {
+              const a0 = seg.startDeg + ((seg.endDeg - seg.startDeg) * s) / steps;
+              const a1 = seg.startDeg + ((seg.endDeg - seg.startDeg) * (s + 1)) / steps;
+              const p0 = rotatePt(seg.cx + seg.r * Math.cos(a0 * DEG2RAD), seg.cy + seg.r * Math.sin(a0 * DEG2RAD), piece.rotationDeg);
+              const p1 = rotatePt(seg.cx + seg.r * Math.cos(a1 * DEG2RAD), seg.cy + seg.r * Math.sin(a1 * DEG2RAD), piece.rotationDeg);
+              if (distToSegment(worldPt.x, worldPt.y, piece.x + p0.x, piece.y + p0.y, piece.x + p1.x, piece.y + p1.y) <= tol) {
+                return piece;
+              }
+            }
+          }
+        }
+      }
+      return null;
+    }
+
+    function getRotationHandlePos(groupIds) {
+      let maxX = -Infinity, cy = 0, minY = Infinity, maxY = -Infinity;
+      for (const id of groupIds) {
+        const p = state.pieces.find(x => x.instanceId === id);
+        if (!p) continue;
+        for (const pt of getPieceSamplePoints(p)) {
+          maxX = Math.max(maxX, pt.x);
+          minY = Math.min(minY, pt.y);
+          maxY = Math.max(maxY, pt.y);
+        }
+      }
+      if (!isFinite(maxX)) return null;
+      cy = (minY + maxY) / 2;
+      return { x: maxX + 34 / state.camera.zoom, y: cy };
+    }
+
+    function hitTestRotationHandle(worldPt) {
+      if (!state.selectedPieceId) return false;
+      const group = state.groupMoveMode ? getConnectedGroup(state.selectedPieceId) : new Set([state.selectedPieceId]);
+      const pos = getRotationHandlePos(group);
+      if (!pos) return false;
+      return Math.hypot(worldPt.x - pos.x, worldPt.y - pos.y) <= 16 / state.camera.zoom;
+    }
+
+    function hitTestSelectedPolygonHandles(worldPt) {
+      if (!state.selectedPolyId) return null;
+      const poly = state.polygons.find(p => p.id === state.selectedPolyId);
+      if (!poly || !poly.points.length) return null;
+      const vTol = 14 / state.camera.zoom;
+      for (let i = 0; i < poly.points.length; i++) {
+        if (Math.hypot(worldPt.x - poly.points[i].x, worldPt.y - poly.points[i].y) <= vTol) {
+          return { polyId: poly.id, type: "vertex", index: i };
+        }
+      }
+      const mTol = 11 / state.camera.zoom;
+      for (let i = 0; i < poly.points.length; i++) {
+        const a = poly.points[i];
+        const b = poly.points[(i + 1) % poly.points.length];
+        const mx = (a.x + b.x) / 2;
+        const my = (a.y + b.y) / 2;
+        if (Math.hypot(worldPt.x - mx, worldPt.y - my) <= mTol) {
+          return { polyId: poly.id, type: "midpoint", index: i + 1, x: mx, y: my };
+        }
+      }
+      return null;
+    }
+
+    function hitTestPolygonBody(worldPt) {
+      const filterRole = state.activeTool === "poly-boundary" ? "boundary" : state.activeTool === "poly-section" ? "section" : null;
+      for (let i = state.polygons.length - 1; i >= 0; i--) {
+        const poly = state.polygons[i];
+        if (filterRole && poly.role !== filterRole) continue;
+        if (poly.points.length >= 3 && pointInPolygon(worldPt, poly.points)) {
+          return poly;
+        }
+      }
+      return null;
+    }
+
+    function hitTestEdgeDimension(worldPt) {
+      for (let i = state.polygons.length - 1; i >= 0; i--) {
+        const poly = state.polygons[i];
+        if (!poly._edgeLabelHits) continue;
+        for (const hit of poly._edgeLabelHits) {
+          if (Math.abs(worldPt.x - hit.mx) <= hit.halfW && Math.abs(worldPt.y - hit.my) <= hit.halfH) {
+            return { poly, hit };
+          }
+        }
+      }
+      return null;
+    }
+
+    // -------------------------------------------------------------------------
+    // 6. CANVAS RENDERER
+    // -------------------------------------------------------------------------
+    const canvas = document.getElementById("layout-canvas");
+    const ctx = canvas.getContext("2d");
+    let renderScheduled = false;
+
+    function requestRender() {
+      if (renderScheduled) return;
+      renderScheduled = true;
+      requestAnimationFrame(() => {
+        renderScheduled = false;
+        renderCanvas();
+      });
+    }
+
+    function resizeCanvas() {
+      const container = document.getElementById("canvas-container");
+      if (!container) return;
+      const rect = container.getBoundingClientRect();
+      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      canvas.width = Math.max(1, Math.round(rect.width * dpr));
+      canvas.height = Math.max(1, Math.round(rect.height * dpr));
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      requestRender();
+    }
+
+    function screenToWorld(sx, sy) {
+      return {
+        x: (sx - state.camera.panX) / state.camera.zoom,
+        y: (sy - state.camera.panY) / state.camera.zoom
+      };
+    }
+
+    function traceSegments(segments) {
+      ctx.beginPath();
+      for (const seg of segments) {
+        if (seg.type === "line") {
+          ctx.moveTo(seg.x1, seg.y1);
+          ctx.lineTo(seg.x2, seg.y2);
+        } else if (seg.type === "arc") {
+          ctx.moveTo(seg.cx + seg.r * Math.cos(seg.startDeg * DEG2RAD), seg.cy + seg.r * Math.sin(seg.startDeg * DEG2RAD));
+          ctx.arc(seg.cx, seg.cy, seg.r, seg.startDeg * DEG2RAD, seg.endDeg * DEG2RAD, false);
+        }
+      }
+    }
+
+    function drawOffsetRails(segments, halfGauge) {
+      for (const seg of segments) {
+        if (seg.type === "line") {
+          const dx = seg.x2 - seg.x1, dy = seg.y2 - seg.y1;
+          const len = Math.hypot(dx, dy) || 1;
+          const nx = (-dy / len) * halfGauge, ny = (dx / len) * halfGauge;
+          ctx.beginPath();
+          ctx.moveTo(seg.x1 + nx, seg.y1 + ny);
+          ctx.lineTo(seg.x2 + nx, seg.y2 + ny);
+          ctx.moveTo(seg.x1 - nx, seg.y1 - ny);
+          ctx.lineTo(seg.x2 - nx, seg.y2 - ny);
+          ctx.stroke();
+        } else if (seg.type === "arc") {
+          ctx.beginPath();
+          ctx.arc(seg.cx, seg.cy, seg.r + halfGauge, seg.startDeg * DEG2RAD, seg.endDeg * DEG2RAD, false);
+          ctx.stroke();
+          ctx.beginPath();
+          ctx.arc(seg.cx, seg.cy, Math.max(1, seg.r - halfGauge), seg.startDeg * DEG2RAD, seg.endDeg * DEG2RAD, false);
+          ctx.stroke();
+        }
+      }
+    }
+
+    function drawGrid(width, height) {
+      const minorMm = 100;
+      const majorMm = 500;
+      const minorPx = minorMm * state.camera.zoom;
+      if (minorPx < 8) return;
+
+      const startWorld = screenToWorld(0, 0);
+      const endWorld = screenToWorld(width, height);
+      const xStart = Math.floor(startWorld.x / minorMm) * minorMm;
+      const xEnd = Math.ceil(endWorld.x / minorMm) * minorMm;
+      const yStart = Math.floor(startWorld.y / minorMm) * minorMm;
+      const yEnd = Math.ceil(endWorld.y / minorMm) * minorMm;
+
+      ctx.lineWidth = 1;
+      for (let x = xStart; x <= xEnd; x += minorMm) {
+        const isMajor = Math.abs(x % majorMm) < 1;
+        ctx.strokeStyle = isMajor ? "rgba(71, 85, 105, 0.28)" : "rgba(51, 65, 85, 0.14)";
+        const sx = x * state.camera.zoom + state.camera.panX;
+        ctx.beginPath();
+        ctx.moveTo(sx, 0);
+        ctx.lineTo(sx, height);
+        ctx.stroke();
+      }
+      for (let y = yStart; y <= yEnd; y += minorMm) {
+        const isMajor = Math.abs(y % majorMm) < 1;
+        ctx.strokeStyle = isMajor ? "rgba(71, 85, 105, 0.28)" : "rgba(51, 65, 85, 0.14)";
+        const sy = y * state.camera.zoom + state.camera.panY;
+        ctx.beginPath();
+        ctx.moveTo(0, sy);
+        ctx.lineTo(width, sy);
+        ctx.stroke();
+      }
+    }
+
+    function drawTrackPiece(piece, { isPrimary, isInGroup, isOutOfBounds, alpha = 1, isGhost = false }) {
+      const item = getEffectivePieceGeom(piece);
+      if (!item) return;
+      const gauge = item.gaugeMm;
+
+      ctx.save();
+      ctx.globalAlpha = alpha;
+      ctx.translate(piece.x, piece.y);
+      ctx.rotate(piece.rotationDeg * DEG2RAD);
+
+      if (item.roadbed) {
+        ctx.strokeStyle = isGhost ? "#38bdf8" : "#334155";
+        ctx.lineWidth = gauge * 2.35;
+        ctx.lineCap = "round";
+        traceSegments(item.segments);
+        ctx.stroke();
+      }
+
+      ctx.strokeStyle = isGhost ? "#7dd3fc" : "#475569";
+      ctx.lineWidth = gauge * 1.85;
+      const tiePitch = Math.max(gauge * 0.48, 3.2);
+      ctx.setLineDash([tiePitch * 0.42, tiePitch * 0.58]);
+      traceSegments(item.segments);
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      if (isPrimary) {
+        ctx.strokeStyle = "rgba(245, 158, 11, 0.42)";
+        ctx.lineWidth = gauge * 2.7;
+        traceSegments(item.segments);
+        ctx.stroke();
+      } else if (isInGroup) {
+        ctx.strokeStyle = "rgba(34, 211, 238, 0.28)";
+        ctx.lineWidth = gauge * 2.5;
+        traceSegments(item.segments);
+        ctx.stroke();
+      } else if (isOutOfBounds) {
+        ctx.strokeStyle = "rgba(244, 63, 94, 0.55)";
+        ctx.lineWidth = gauge * 2.6;
+        traceSegments(item.segments);
+        ctx.stroke();
+      }
+
+      ctx.strokeStyle = isGhost ? "#fef08a" : isPrimary ? "#fbbf24" : "#f8fafc";
+      ctx.lineWidth = Math.max(gauge * 0.14, 1.2);
+      drawOffsetRails(item.segments, gauge / 2);
+
+      if (state.camera.zoom >= 0.45 && !isGhost) {
+        ctx.fillStyle = isPrimary ? "#fbbf24" : "#94a3b8";
+        ctx.font = `600 ${Math.max(9, gauge * 0.65)}px 'JetBrains Mono', monospace`;
+        ctx.textAlign = "center";
+        ctx.fillText(item.sku, (item.lengthMm || 60) * 0.5, -gauge * 1.15);
+      }
+      ctx.restore();
+    }
+
+    function drawPolygons() {
+      const invZoom = 1 / state.camera.zoom;
+      for (const poly of state.polygons) {
+        if (!poly.points || poly.points.length < 3) continue;
+        const isBoundary = poly.role === "boundary";
+        const isSelected = poly.id === state.selectedPolyId;
+
+        ctx.save();
+        ctx.beginPath();
+        poly.points.forEach((pt, idx) => idx === 0 ? ctx.moveTo(pt.x, pt.y) : ctx.lineTo(pt.x, pt.y));
+        ctx.closePath();
+
+        ctx.fillStyle = isBoundary
+          ? (isSelected ? "rgba(16, 185, 129, 0.14)" : "rgba(16, 185, 129, 0.06)")
+          : (isSelected ? "rgba(6, 182, 212, 0.18)" : "rgba(6, 182, 212, 0.09)");
+        ctx.fill();
+
+        ctx.strokeStyle = isSelected ? "#fbbf24" : isBoundary ? "#10b981" : "#06b6d4";
+        ctx.lineWidth = (isSelected ? 3 : 2) * invZoom;
+        if (!isBoundary) ctx.setLineDash([10 * invZoom, 6 * invZoom]);
+        ctx.stroke();
+        ctx.setLineDash([]);
+
+        const cx = poly.points.reduce((s, p) => s + p.x, 0) / poly.points.length;
+        const cy = poly.points.reduce((s, p) => s + p.y, 0) / poly.points.length;
+        ctx.fillStyle = isBoundary ? "#6ee7b7" : "#67e8f9";
+        ctx.font = `700 ${Math.max(11 * invZoom, 10)}px Inter, sans-serif`;
+        ctx.textAlign = "center";
+        ctx.fillText(`${poly.name} (${formatArea(polygonAreaMm2(poly.points))})`, cx, cy);
+
+        const showDims = isSelected || state.activeTool !== "select" || state.camera.zoom >= 0.35;
+        poly._edgeLabelHits = [];
+        if (showDims) {
+          for (let i = 0; i < poly.points.length; i++) {
+            const p1 = poly.points[i];
+            const p2 = poly.points[(i + 1) % poly.points.length];
+            const edgeLen = Math.hypot(p2.x - p1.x, p2.y - p1.y);
+            if (edgeLen < 15) continue;
+            const mx = (p1.x + p2.x) / 2;
+            const my = (p1.y + p2.y) / 2;
+            const label = formatLength(edgeLen);
+
+            ctx.font = `600 ${Math.max(10 * invZoom, 9)}px 'JetBrains Mono', monospace`;
+            const textW = ctx.measureText(label).width + 8 * invZoom;
+            const textH = 15 * invZoom;
+
+            ctx.fillStyle = isSelected ? "rgba(15, 23, 42, 0.92)" : "rgba(15, 23, 42, 0.72)";
+            ctx.strokeStyle = isSelected ? "rgba(245, 158, 11, 0.75)" : "rgba(71, 85, 105, 0.5)";
+            ctx.lineWidth = 1 * invZoom;
+            ctx.beginPath();
+            ctx.roundRect(mx - textW / 2, my - textH / 2, textW, textH, 4 * invZoom);
+            ctx.fill();
+            ctx.stroke();
+
+            ctx.fillStyle = isSelected ? "#fbbf24" : "#cbd5e1";
+            ctx.textAlign = "center";
+            ctx.textBaseline = "middle";
+            ctx.fillText(label, mx, my);
+            ctx.textBaseline = "alphabetic";
+
+            poly._edgeLabelHits.push({ edgeIdx: i, mx, my, halfW: textW * 0.65, halfH: textH * 0.75, lengthMm: edgeLen });
+          }
+        }
+
+        if (isSelected && state.activeTool !== "select") {
+          for (let i = 0; i < poly.points.length; i++) {
+            const p1 = poly.points[i];
+            const p2 = poly.points[(i + 1) % poly.points.length];
+            const mx = (p1.x + p2.x) / 2;
+            const my = (p1.y + p2.y) / 2;
+            ctx.fillStyle = "rgba(15, 23, 42, 0.9)";
+            ctx.strokeStyle = "#f59e0b";
+            ctx.lineWidth = 1.5 * invZoom;
+            ctx.beginPath();
+            ctx.arc(mx, my, 5 * invZoom, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.stroke();
+
+            ctx.fillStyle = "#f59e0b";
+            ctx.strokeStyle = "#ffffff";
+            ctx.lineWidth = 2 * invZoom;
+            ctx.beginPath();
+            ctx.arc(p1.x, p1.y, 7.5 * invZoom, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.stroke();
+          }
+        }
+        ctx.restore();
+      }
+    }
+
+    function drawDraftPolygon() {
+      const draft = state.draftPolygon;
+      if (!draft || !draft.points.length) return;
+      const invZoom = 1 / state.camera.zoom;
+      const pts = draft.points;
+
+      ctx.save();
+      ctx.strokeStyle = draft.role === "boundary" ? "#34d399" : "#22d3ee";
+      ctx.lineWidth = 2 * invZoom;
+      ctx.setLineDash([6 * invZoom, 4 * invZoom]);
+      ctx.beginPath();
+      pts.forEach((p, i) => i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y));
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      pts.forEach((p, idx) => {
+        ctx.fillStyle = idx === 0 ? "#fbbf24" : "#ffffff";
+        ctx.strokeStyle = "#0f172a";
+        ctx.lineWidth = 2 * invZoom;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, (idx === 0 ? 7 : 5.5) * invZoom, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+      });
+      ctx.restore();
+    }
+
+    function drawRotationHandle(groupIds) {
+      const pos = getRotationHandlePos(groupIds);
+      if (!pos) return;
+      const center = getGroupBoundingCenter(groupIds);
+      const invZoom = 1 / state.camera.zoom;
+
+      ctx.save();
+      ctx.strokeStyle = "rgba(251, 191, 36, 0.45)";
+      ctx.lineWidth = 1.5 * invZoom;
+      ctx.setLineDash([4 * invZoom, 4 * invZoom]);
+      ctx.beginPath();
+      ctx.moveTo(center.x, center.y);
+      ctx.lineTo(pos.x, pos.y);
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      ctx.fillStyle = "#f59e0b";
+      ctx.strokeStyle = "#ffffff";
+      ctx.lineWidth = 2 * invZoom;
+      ctx.beginPath();
+      ctx.arc(pos.x, pos.y, 9 * invZoom, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    function drawRightAngleGlyph(pt) {
+      const invZoom = 1 / state.camera.zoom;
+      const s = 14 * invZoom;
+      ctx.save();
+      ctx.strokeStyle = "#10b981";
+      ctx.fillStyle = "rgba(16, 185, 129, 0.25)";
+      ctx.lineWidth = 2 * invZoom;
+      ctx.beginPath();
+      ctx.arc(pt.x, pt.y, s, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+      ctx.fillStyle = "#6ee7b7";
+      ctx.font = `700 ${Math.max(11 * invZoom, 10)}px 'JetBrains Mono', monospace`;
+      ctx.textAlign = "center";
+      ctx.fillText("90°", pt.x, pt.y - s - 4 * invZoom);
+      ctx.restore();
+    }
+
+    function renderCanvas() {
+      const container = document.getElementById("canvas-container");
+      if (!container) return;
+      const rect = container.getBoundingClientRect();
+      ctx.clearRect(0, 0, rect.width, rect.height);
+      ctx.fillStyle = "#080d18";
+      ctx.fillRect(0, 0, rect.width, rect.height);
+
+      drawGrid(rect.width, rect.height);
+
+      ctx.save();
+      ctx.translate(state.camera.panX, state.camera.panY);
+      ctx.scale(state.camera.zoom, state.camera.zoom);
+
+      drawPolygons();
+      drawDraftPolygon();
+
+      const selectedGroup = state.selectedPieceId
+        ? (state.groupMoveMode ? getConnectedGroup(state.selectedPieceId) : new Set([state.selectedPieceId]))
+        : new Set();
+
+      for (const piece of state.pieces) {
+        drawTrackPiece(piece, {
+          isPrimary: piece.instanceId === state.selectedPieceId,
+          isInGroup: piece.instanceId !== state.selectedPieceId && selectedGroup.has(piece.instanceId),
+          isOutOfBounds: isPieceOutOfBounds(piece)
+        });
+      }
+
+      const invZoom = 1 / state.camera.zoom;
+      for (const conn of state.connections) {
+        const pA = state.pieces.find(x => x.instanceId === conn.pieceA);
+        const wpA = pA ? getPieceWorldPorts(pA).find(w => w.portId === conn.portA) : null;
+        if (!wpA) continue;
+        ctx.fillStyle = "#10b981";
+        ctx.beginPath();
+        ctx.arc(wpA.x, wpA.y, 4 * invZoom, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      if (state.showOpenPorts) {
+        const openPorts = getOpenWorldPorts();
+        for (const op of openPorts) {
+          ctx.strokeStyle = "#f59e0b";
+          ctx.fillStyle = "rgba(245, 158, 11, 0.22)";
+          ctx.lineWidth = 1.8 * invZoom;
+          ctx.beginPath();
+          ctx.arc(op.x, op.y, 5.5 * invZoom, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.stroke();
+        }
+      }
+
+      if (state.catalogDrag && state.catalogDrag.ghostPiece) {
+        const gp = state.catalogDrag.ghostPiece;
+        drawTrackPiece(gp, { isPrimary: false, isInGroup: false, isOutOfBounds: false, alpha: 0.85, isGhost: true });
+        if (state.catalogDrag.snap) {
+          const tp = state.catalogDrag.snap.targetPort;
+          ctx.strokeStyle = "#34d399";
+          ctx.lineWidth = 2.5 * invZoom;
+          ctx.beginPath();
+          ctx.arc(tp.x, tp.y, 11 * invZoom, 0, Math.PI * 2);
+          ctx.stroke();
+        }
+      }
+
+      if (state.activeTool === "select" && state.selectedPieceId && selectedGroup.size > 0) {
+        drawRotationHandle(selectedGroup);
+      }
+
+      if (state.snappedRightAngleCorner) {
+        drawRightAngleGlyph(state.snappedRightAngleCorner);
+      }
+
+      ctx.restore();
+    }
+
+    // -------------------------------------------------------------------------
+    // 7. INTERACTION & GESTURES (Strict Mode Isolation + 90° Snapping)
+    // -------------------------------------------------------------------------
+    const activePointers = new Map();
+    let pinchStartDist = 0;
+    let pinchStartZoom = 1;
+    let pinchWorldCenter = null;
+
+    function snapPointTo90Corners(pt, prevPt, nextPt = null) {
+      state.snappedRightAngleCorner = null;
+      if (!state.snap90Mode || !prevPt) return { x: Math.round(pt.x), y: Math.round(pt.y) };
+
+      const angleTol = 6.5;
+      let bestPt = { x: Math.round(pt.x), y: Math.round(pt.y) };
+
+      const dx = pt.x - prevPt.x;
+      const dy = pt.y - prevPt.y;
+      const dist = Math.hypot(dx, dy);
+      if (dist > 10) {
+        const ang = Math.atan2(dy, dx) * RAD2DEG;
+        const nearest90 = Math.round(ang / 90) * 90;
+        if (Math.abs(normAngle(ang - nearest90)) <= angleTol) {
+          const rad = nearest90 * DEG2RAD;
+          bestPt = {
+            x: Math.round(prevPt.x + dist * Math.cos(rad)),
+            y: Math.round(prevPt.y + dist * Math.sin(rad))
+          };
+          state.snappedRightAngleCorner = { x: prevPt.x, y: prevPt.y };
+        }
+      }
+
+      if (nextPt) {
+        const v1x = prevPt.x - bestPt.x, v1y = prevPt.y - bestPt.y;
+        const v2x = nextPt.x - bestPt.x, v2y = nextPt.y - bestPt.y;
+        const l1 = Math.hypot(v1x, v1y), l2 = Math.hypot(v2x, v2y);
+        if (l1 > 10 && l2 > 10) {
+          const cosTheta = (v1x * v2x + v1y * v2y) / (l1 * l2);
+          const cornerDeg = Math.acos(Math.min(1, Math.max(-1, cosTheta))) * RAD2DEG;
+          if (Math.abs(cornerDeg - 90) <= angleTol) {
+            const midX = (prevPt.x + nextPt.x) / 2;
+            const midY = (prevPt.y + nextPt.y) / 2;
+            const rad = Math.hypot(nextPt.x - prevPt.x, nextPt.y - prevPt.y) / 2;
+            const dirX = bestPt.x - midX, dirY = bestPt.y - midY;
+            const dirLen = Math.hypot(dirX, dirY) || 1;
+            bestPt = {
+              x: Math.round(midX + (dirX / dirLen) * rad),
+              y: Math.round(midY + (dirY / dirLen) * rad)
+            };
+            state.snappedRightAngleCorner = { ...bestPt };
+          }
+        }
+      }
+      return bestPt;
+    }
+
+    function openEdgeDimensionEditor(poly, hit, clientX, clientY) {
+      state.editingEdge = { polyId: poly.id, edgeIdx: hit.edgeIdx };
+      const pop = document.getElementById("edge-dim-popover");
+      const inp = document.getElementById("inp-edge-len");
+      const unitLbl = document.getElementById("edge-dim-unit");
+
+      if (state.unitSystem === "imperial") {
+        inp.value = (hit.lengthMm / 25.4).toFixed(2);
+        unitLbl.textContent = "in";
+      } else {
+        inp.value = Math.round(hit.lengthMm);
+        unitLbl.textContent = "mm";
+      }
+
+      pop.style.left = `${Math.min(window.innerWidth - 110, Math.max(110, clientX))}px`;
+      pop.style.top = `${Math.min(window.innerHeight - 90, Math.max(70, clientY - 28))}px`;
+      pop.classList.remove("hidden");
+      inp.focus();
+      inp.select();
+    }
+
+    function applyEdgeDimensionEdit() {
+      if (!state.editingEdge) return;
+      const poly = state.polygons.find(p => p.id === state.editingEdge.polyId);
+      const val = parseFloat(document.getElementById("inp-edge-len").value);
+      document.getElementById("edge-dim-popover").classList.add("hidden");
+      if (!poly || isNaN(val) || val <= 0) {
+        state.editingEdge = null;
+        return;
+      }
+
+      const targetMm = state.unitSystem === "imperial" ? val * 25.4 : val;
+      const i1 = state.editingEdge.edgeIdx;
+      const i2 = (i1 + 1) % poly.points.length;
+      const p1 = poly.points[i1];
+      const p2 = poly.points[i2];
+      const dx = p2.x - p1.x;
+      const dy = p2.y - p1.y;
+      const currLen = Math.hypot(dx, dy);
+
+      if (currLen > 0.1) {
+        pushUndo();
+        const scale = targetMm / currLen;
+        const shiftX = Math.round(p1.x + dx * scale - p2.x);
+        const shiftY = Math.round(p1.y + dy * scale - p2.y);
+        p2.x += shiftX;
+        p2.y += shiftY;
+
+        if (poly.points.length === 4) {
+          const i3 = (i2 + 1) % 4;
+          const p3 = poly.points[i3];
+          const prevEdge = { x: p2.x - shiftX - p1.x, y: p2.y - shiftY - p1.y };
+          const nextEdge = { x: p3.x - (p2.x - shiftX), y: p3.y - (p2.y - shiftY) };
+          if (Math.abs(prevEdge.x * nextEdge.x + prevEdge.y * nextEdge.y) < 50) {
+            p3.x += shiftX;
+            p3.y += shiftY;
+          }
+        }
+
+        updateSelectionUI();
+        refreshSectionsTab();
+        saveToLocalStorage();
+        requestRender();
+        showToast(`Edge updated to ${formatLength(targetMm)}`);
+      }
+      state.editingEdge = null;
+    }
+
+    canvas.addEventListener("pointerdown", e => {
+      canvas.setPointerCapture(e.pointerId);
+      const rect = canvas.getBoundingClientRect();
+      const sx = e.clientX - rect.left;
+      const sy = e.clientY - rect.top;
+      activePointers.set(e.pointerId, { x: sx, y: sy });
+
+      if (activePointers.size === 2) {
+        state.dragState = null;
+        const pts = [...activePointers.values()];
+        pinchStartDist = Math.hypot(pts[1].x - pts[0].x, pts[1].y - pts[0].y) || 1;
+        pinchStartZoom = state.camera.zoom;
+        const midScreen = { x: (pts[0].x + pts[1].x) / 2, y: (pts[0].y + pts[1].y) / 2 };
+        pinchWorldCenter = screenToWorld(midScreen.x, midScreen.y);
+        return;
+      }
+
+      const worldPt = screenToWorld(sx, sy);
+
+      // Board / Section Mode: only interacts with boards/sections/edges
+      if (state.activeTool === "poly-boundary" || state.activeTool === "poly-section") {
+        const edgeHit = hitTestEdgeDimension(worldPt);
+        if (edgeHit && (!state.draftPolygon || state.draftPolygon.points.length === 0)) {
+          state.selectedPolyId = edgeHit.poly.id;
+          state.selectedPieceId = null;
+          updateSelectionUI();
+          openEdgeDimensionEditor(edgeHit.poly, edgeHit.hit, e.clientX, e.clientY);
+          requestRender();
+          return;
+        }
+
+        if (!state.draftPolygon || state.draftPolygon.points.length === 0) {
+          const polyHandle = hitTestSelectedPolygonHandles(worldPt);
+          if (polyHandle) {
+            pushUndo();
+            const poly = state.polygons.find(p => p.id === polyHandle.polyId);
+            if (polyHandle.type === "midpoint") {
+              poly.points.splice(polyHandle.index, 0, { x: Math.round(polyHandle.x), y: Math.round(polyHandle.y) });
+            }
+            state.dragState = { type: "drag-poly-vertex", polyId: poly.id, vertexIndex: polyHandle.index };
+            requestRender();
+            return;
+          }
+
+          const hitPoly = hitTestPolygonBody(worldPt);
+          if (hitPoly) {
+            state.selectedPolyId = hitPoly.id;
+            state.selectedPieceId = null;
+            updateSelectionUI();
+            pushUndo();
+            state.dragState = {
+              type: "move-polygon",
+              polyId: hitPoly.id,
+              startWorld: worldPt,
+              initialPoints: hitPoly.points.map(pt => ({ ...pt }))
+            };
+            requestRender();
+            return;
+          }
+        }
+
+        if (!state.draftPolygon) {
+          state.draftPolygon = {
+            role: state.activeTool === "poly-boundary" ? "boundary" : "section",
+            points: []
+          };
+        }
+        const pts = state.draftPolygon.points;
+        if (pts.length >= 3 && Math.hypot(pts[0].x - worldPt.x, pts[0].y - worldPt.y) <= 22 / state.camera.zoom) {
+          finishDraftPolygon();
+          return;
+        }
+        const prevPt = pts.length > 0 ? pts[pts.length - 1] : null;
+        const nextPt = pts.length >= 2 ? pts[0] : null;
+        pts.push(snapPointTo90Corners(worldPt, prevPt, nextPt));
+        updatePolyDrawBanner();
+        requestRender();
+        return;
+      }
+
+      // Track Mode ("select"): clicking boards pans the canvas; only track pieces/handles move/rotate
+      if (hitTestRotationHandle(worldPt)) {
+        pushUndo();
+        const group = state.groupMoveMode ? getConnectedGroup(state.selectedPieceId) : new Set([state.selectedPieceId]);
+        const center = getGroupBoundingCenter(group);
+        const startAngle = Math.atan2(worldPt.y - center.y, worldPt.x - center.x) * RAD2DEG;
+        const initialTransforms = new Map();
+        for (const id of group) {
+          const p = state.pieces.find(x => x.instanceId === id);
+          if (p) initialTransforms.set(id, { x: p.x, y: p.y, rotationDeg: p.rotationDeg });
+        }
+        state.dragState = { type: "rotate-group", group, center, startAngle, initialTransforms };
+        return;
+      }
+
+      const hitPiece = hitTestPiece(worldPt);
+      if (hitPiece) {
+        state.selectedPieceId = hitPiece.instanceId;
+        state.selectedPolyId = null;
+        updateSelectionUI();
+        pushUndo();
+        if (!state.groupMoveMode) disconnectPiece(hitPiece.instanceId);
+        const movingIds = state.groupMoveMode ? getConnectedGroup(hitPiece.instanceId) : new Set([hitPiece.instanceId]);
+        const initialPos = new Map();
+        for (const id of movingIds) {
+          const p = state.pieces.find(x => x.instanceId === id);
+          if (p) initialPos.set(id, { x: p.x, y: p.y });
+        }
+        state.dragState = {
+          type: "move-pieces",
+          leadPieceId: hitPiece.instanceId,
+          movingIds,
+          startWorld: worldPt,
+          initialPos
+        };
+        requestRender();
+        return;
+      }
+
+      state.selectedPieceId = null;
+      state.selectedPolyId = null;
+      updateSelectionUI();
+      state.dragState = {
+        type: "pan",
+        startScreen: { x: sx, y: sy },
+        startPan: { x: state.camera.panX, y: state.camera.panY }
+      };
+      requestRender();
+    });
+
+    canvas.addEventListener("pointermove", e => {
+      if (!activePointers.has(e.pointerId)) return;
+      const rect = canvas.getBoundingClientRect();
+      const sx = e.clientX - rect.left;
+      const sy = e.clientY - rect.top;
+      activePointers.set(e.pointerId, { x: sx, y: sy });
+
+      if (activePointers.size === 2 && pinchWorldCenter) {
+        const pts = [...activePointers.values()];
+        const dist = Math.hypot(pts[1].x - pts[0].x, pts[1].y - pts[0].y) || 1;
+        const newZoom = Math.min(8, Math.max(0.1, pinchStartZoom * (dist / pinchStartDist)));
+        const midScreen = { x: (pts[0].x + pts[1].x) / 2, y: (pts[0].y + pts[1].y) / 2 };
+        state.camera.zoom = newZoom;
+        state.camera.panX = midScreen.x - pinchWorldCenter.x * newZoom;
+        state.camera.panY = midScreen.y - pinchWorldCenter.y * newZoom;
+        requestRender();
+        return;
+      }
+
+      if (!state.dragState) return;
+      const worldPt = screenToWorld(sx, sy);
+
+      if (state.dragState.type === "pan") {
+        state.camera.panX = state.dragState.startPan.x + (sx - state.dragState.startScreen.x);
+        state.camera.panY = state.dragState.startPan.y + (sy - state.dragState.startScreen.y);
+        requestRender();
+      } else if (state.dragState.type === "move-pieces") {
+        const dx = worldPt.x - state.dragState.startWorld.x;
+        const dy = worldPt.y - state.dragState.startWorld.y;
+        for (const id of state.dragState.movingIds) {
+          const p = state.pieces.find(x => x.instanceId === id);
+          const init = state.dragState.initialPos.get(id);
+          if (p && init) { p.x = init.x + dx; p.y = init.y + dy; }
+        }
+        updateCloseGapInspector();
+        requestRender();
+      } else if (state.dragState.type === "rotate-group") {
+        const currAngle = Math.atan2(worldPt.y - state.dragState.center.y, worldPt.x - state.dragState.center.x) * RAD2DEG;
+        let delta = normAngle(currAngle - state.dragState.startAngle);
+        if (Math.abs(normAngle(delta - Math.round(delta / 15) * 15)) < 2.2) {
+          delta = Math.round(delta / 15) * 15;
+        }
+        for (const [id, init] of state.dragState.initialTransforms.entries()) {
+          const p = state.pieces.find(x => x.instanceId === id);
+          if (!p) continue;
+          const rel = rotatePt(init.x - state.dragState.center.x, init.y - state.dragState.center.y, delta);
+          p.x = state.dragState.center.x + rel.x;
+          p.y = state.dragState.center.y + rel.y;
+          p.rotationDeg = normAngle(init.rotationDeg + delta);
+        }
+        updateSelectionUI();
+        updateCloseGapInspector();
+        requestRender();
+      } else if (state.dragState.type === "drag-poly-vertex") {
+        const poly = state.polygons.find(p => p.id === state.dragState.polyId);
+        if (poly && poly.points[state.dragState.vertexIndex]) {
+          const idx = state.dragState.vertexIndex;
+          const prevPt = poly.points[(idx - 1 + poly.points.length) % poly.points.length];
+          const nextPt = poly.points[(idx + 1) % poly.points.length];
+          const snapped = snapPointTo90Corners(worldPt, prevPt, nextPt);
+          poly.points[idx].x = snapped.x;
+          poly.points[idx].y = snapped.y;
+          updateSelectionUI();
+          refreshSectionsTab();
+          requestRender();
+        }
+      } else if (state.dragState.type === "move-polygon") {
+        const poly = state.polygons.find(p => p.id === state.dragState.polyId);
+        if (poly) {
+          const dx = Math.round(worldPt.x - state.dragState.startWorld.x);
+          const dy = Math.round(worldPt.y - state.dragState.startWorld.y);
+          poly.points = state.dragState.initialPoints.map(pt => ({ x: pt.x + dx, y: pt.y + dy }));
+          refreshSectionsTab();
+          requestRender();
+        }
+      }
+    });
+
+    function endPointer(e) {
+      activePointers.delete(e.pointerId);
+      if (activePointers.size < 2) pinchWorldCenter = null;
+      state.snappedRightAngleCorner = null;
+
+      if (state.dragState) {
+        if (state.dragState.type === "move-pieces") {
+          const lead = state.pieces.find(x => x.instanceId === state.dragState.leadPieceId);
+          if (lead) {
+            const snap = findBestSnapForPiece(lead, state.dragState.movingIds, 24 / state.camera.zoom);
+            if (snap) {
+              applySnapToPiece(lead, snap, state.dragState.movingIds);
+              showToast("Auto-connected track port");
+            }
+          }
+          updateHeaderStats();
+          updateCloseGapInspector();
+          refreshSectionsTab();
+        }
+        state.dragState = null;
+        saveToLocalStorage();
+        requestRender();
+      }
+    }
+
+    canvas.addEventListener("pointerup", endPointer);
+    canvas.addEventListener("pointercancel", endPointer);
+
+    canvas.addEventListener("wheel", e => {
+      e.preventDefault();
+      const rect = canvas.getBoundingClientRect();
+      const sx = e.clientX - rect.left, sy = e.clientY - rect.top;
+      const before = screenToWorld(sx, sy);
+      const factor = e.deltaY < 0 ? 1.12 : 1 / 1.12;
+      state.camera.zoom = Math.min(8, Math.max(0.1, state.camera.zoom * factor));
+      state.camera.panX = sx - before.x * state.camera.zoom;
+      state.camera.panY = sy - before.y * state.camera.zoom;
+      requestRender();
+    }, { passive: false });
+
+    // -------------------------------------------------------------------------
+    // 8. POLYGON DRAWING, STANDARD BOARDS & MODE SWITCHING
+    // -------------------------------------------------------------------------
+    function setActiveTool(tool) {
+      state.activeTool = tool;
+      state.snappedRightAngleCorner = null;
+      document.getElementById("edge-dim-popover").classList.add("hidden");
+
+      const groupBtn = document.getElementById("btn-group-mode");
+      const boardTools = document.getElementById("board-mode-tools");
+
+      if (tool === "select") {
+        state.draftPolygon = null;
+        state.selectedPolyId = null;
+        groupBtn.classList.remove("hidden");
+        boardTools.classList.add("hidden");
+      } else {
+        state.selectedPieceId = null;
+        state.selectedPolyId = null;
+        state.draftPolygon = {
+          role: tool === "poly-boundary" ? "boundary" : "section",
+          points: []
+        };
+        groupBtn.classList.add("hidden");
+        boardTools.classList.remove("hidden");
+      }
+
+      document.querySelectorAll(".tool-btn").forEach(btn => {
+        const active = btn.dataset.tool === tool;
+        btn.className = active
+          ? "tool-btn flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-amber-500 text-slate-950 shadow transition"
+          : "tool-btn flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold text-slate-300 hover:text-white transition";
+      });
+
+      updatePolyDrawBanner();
+      updateSelectionUI();
+      requestRender();
+    }
+
+    function updatePolyDrawBanner() {
+      const banner = document.getElementById("poly-draw-banner");
+      const closeBtn = document.getElementById("btn-poly-close");
+      const status = document.getElementById("poly-draw-status");
+      if (!state.draftPolygon || (state.activeTool !== "poly-boundary" && state.activeTool !== "poly-section")) {
+        banner.classList.add("hidden");
+        return;
+      }
+      const count = state.draftPolygon.points.length;
+      const kindLabel = state.draftPolygon.role === "boundary" ? "Board Boundary" : "Section Zone";
+      status.textContent = count === 0
+        ? `Tap canvas to place ${kindLabel} vertices`
+        : `${kindLabel}: ${count} pt${count > 1 ? "s" : ""} (90° snap ${state.snap90Mode ? "ON" : "OFF"})`;
+      closeBtn.disabled = count < 3;
+      banner.classList.remove("hidden");
+    }
+
+    function finishDraftPolygon() {
+      const draft = state.draftPolygon;
+      if (!draft || draft.points.length < 3) return;
+      pushUndo();
+      const idx = state.polygons.filter(p => p.role === draft.role).length + 1;
+      const newPoly = {
+        id: uid("poly"),
+        name: draft.role === "boundary" ? `Baseboard ${idx}` : `Section ${idx}`,
+        role: draft.role,
+        points: draft.points.map(p => ({ ...p })),
+        color: draft.role === "boundary" ? "#10b981" : "#06b6d4"
+      };
+      state.polygons.push(newPoly);
+      state.draftPolygon = { role: draft.role, points: [] };
+      state.selectedPolyId = newPoly.id;
+      updatePolyDrawBanner();
+      updateSelectionUI();
+      refreshSectionsTab();
+      saveToLocalStorage();
+      requestRender();
+      showToast(`Created ${newPoly.name}`);
+    }
+
+    function insertStandardShapeBoard() {
+      const role = document.getElementById("shape-role").value;
+      const name = document.getElementById("shape-name").value.trim() || (role === "boundary" ? "Baseboard" : "Section");
+      const mult = state.unitSystem === "imperial" ? 25.4 : 1;
+
+      const W = Math.max(100, (parseFloat(document.getElementById("inp-shape-w").value) || 1200) * mult);
+      const D = Math.max(100, (parseFloat(document.getElementById("inp-shape-d").value) || 800) * mult);
+      const WW = Math.max(80, (parseFloat(document.getElementById("inp-shape-ww").value) || 600) * mult);
+      const WD = Math.max(80, (parseFloat(document.getElementById("inp-shape-wd").value) || 500) * mult);
+
+      const rect = canvas.getBoundingClientRect();
+      const center = screenToWorld(rect.width / 2, rect.height / 2);
+      const x0 = Math.round(center.x - W / 2);
+      const y0 = Math.round(center.y - D / 2);
+
+      let pts = [];
+      if (state.selectedShapeType === "rect") {
+        pts = [
+          { x: x0, y: y0 },
+          { x: Math.round(x0 + W), y: y0 },
+          { x: Math.round(x0 + W), y: Math.round(y0 + D) },
+          { x: x0, y: Math.round(y0 + D) }
+        ];
+      } else if (state.selectedShapeType === "l-shape") {
+        pts = [
+          { x: x0, y: y0 },
+          { x: Math.round(x0 + W), y: y0 },
+          { x: Math.round(x0 + W), y: Math.round(y0 + WD) },
+          { x: Math.round(x0 + WW), y: Math.round(y0 + WD) },
+          { x: Math.round(x0 + WW), y: Math.round(y0 + D) },
+          { x: x0, y: Math.round(y0 + D) }
+        ];
+      } else if (state.selectedShapeType === "u-shape") {
+        const wing = Math.min(WW, W * 0.42);
+        pts = [
+          { x: x0, y: y0 },
+          { x: Math.round(x0 + W), y: y0 },
+          { x: Math.round(x0 + W), y: Math.round(y0 + D) },
+          { x: Math.round(x0 + W - wing), y: Math.round(y0 + D) },
+          { x: Math.round(x0 + W - wing), y: Math.round(y0 + WD) },
+          { x: Math.round(x0 + wing), y: Math.round(y0 + WD) },
+          { x: Math.round(x0 + wing), y: Math.round(y0 + D) },
+          { x: x0, y: Math.round(y0 + D) }
+        ];
+      } else {
+        const steps = 12;
+        for (let i = 0; i < steps; i++) {
+          const a = (i / steps) * Math.PI * 2;
+          pts.push({
+            x: Math.round(center.x + (W / 2) * Math.cos(a)),
+            y: Math.round(center.y + (D / 2) * Math.sin(a))
+          });
+        }
+      }
+
+      pushUndo();
+      const newPoly = {
+        id: uid("poly"),
+        name,
+        role,
+        points: pts,
+        color: role === "boundary" ? "#10b981" : "#06b6d4"
+      };
+      state.polygons.push(newPoly);
+      setActiveTool(role === "boundary" ? "poly-boundary" : "poly-section");
+      state.draftPolygon = null;
+      state.selectedPolyId = newPoly.id;
+      updatePolyDrawBanner();
+      updateSelectionUI();
+      refreshSectionsTab();
+      saveToLocalStorage();
+      requestRender();
+      showToast(`Inserted ${name}`);
+    }
+
+    // -------------------------------------------------------------------------
+    // 9. SELECTION UI, HEADER STATS & GAP HELPER
+    // -------------------------------------------------------------------------
+    function updateSelectionUI() {
+      const toolbar = document.getElementById("selection-toolbar");
+      const trackControls = document.getElementById("track-sel-controls");
+      const polyControls = document.getElementById("poly-sel-controls");
+      const quickFavStrip = document.getElementById("quick-fav-strip");
+      const flexEditor = document.getElementById("flextrack-editor");
+
+      if (state.selectedPieceId) {
+        const piece = state.pieces.find(p => p.instanceId === state.selectedPieceId);
+        if (!piece) {
+          state.selectedPieceId = null;
+          return updateSelectionUI();
+        }
+        const item = CATALOG_BY_SKU.get(piece.sku);
+        const group = getConnectedGroup(piece.instanceId);
+        const hasJoints = state.connections.some(c => c.pieceA === piece.instanceId || c.pieceB === piece.instanceId);
+
+        toolbar.classList.remove("hidden");
+        trackControls.classList.remove("hidden");
+        polyControls.classList.add("hidden");
+        quickFavStrip.classList.add("hidden");
+
+        document.getElementById("sel-sku").textContent = item.sku;
+        document.getElementById("sel-name").textContent = item.name;
+        document.getElementById("sel-meta").textContent = `Group: ${group.size} pc${group.size > 1 ? "s" : ""} • ${item.manufacturer}`;
+        document.getElementById("inp-sel-angle").value = Math.round(piece.rotationDeg * 10) / 10;
+        document.getElementById("btn-sel-disconnect").disabled = !hasJoints;
+
+        const isFav = state.favourites.has(item.sku);
+        document.getElementById("sel-fav-icon").setAttribute("fill", isFav ? "#fbbf24" : "none");
+
+        if (item.isFlex) {
+          flexEditor.classList.remove("hidden");
+          const len = Math.round(piece.flexLengthMm || item.lengthMm || 450);
+          const bend = Math.round(piece.flexBendDeg || 0);
+          document.getElementById("inp-flex-len").value = len;
+          document.getElementById("flex-len-val").textContent = formatLength(len);
+          document.getElementById("inp-flex-bend").value = bend;
+          document.getElementById("flex-bend-val").textContent = `${bend}°`;
+        } else {
+          flexEditor.classList.add("hidden");
+        }
+      } else if (state.selectedPolyId) {
+        const poly = state.polygons.find(p => p.id === state.selectedPolyId);
+        if (!poly) {
+          state.selectedPolyId = null;
+          return updateSelectionUI();
+        }
+        toolbar.classList.remove("hidden");
+        trackControls.classList.add("hidden");
+        polyControls.classList.remove("hidden");
+        quickFavStrip.classList.add("hidden");
+
+        document.getElementById("inp-poly-name").value = poly.name;
+        document.getElementById("poly-metrics").textContent =
+          `${poly.role === "boundary" ? "Board" : "Section"} • ${formatArea(polygonAreaMm2(poly.points))} • Tap edge label to edit`;
+      } else {
+        toolbar.classList.add("hidden");
+        flexEditor.classList.add("hidden");
+        if (state.drawerHeightPx !== null && state.drawerHeightPx <= 64 && state.favourites.size > 0) {
+          quickFavStrip.classList.remove("hidden");
+        } else {
+          quickFavStrip.classList.add("hidden");
+        }
+      }
+    }
+
+    function updateHeaderStats() {
+      let totalMm = 0;
+      for (const p of state.pieces) {
+        const g = getEffectivePieceGeom(p);
+        if (g) totalMm += g.lengthMm || 0;
+      }
+      document.getElementById("layout-stats").textContent = `${state.pieces.length} pcs • ${formatLength(totalMm)}`;
+      document.getElementById("fav-count").textContent = String(state.favourites.size);
+      renderQuickFavStrip();
+    }
+
+    function updateCloseGapInspector() {
+      const pill = document.getElementById("gap-helper-pill");
+      const open = getOpenWorldPorts();
+      if (open.length < 2) {
+        pill.classList.add("hidden");
+        return;
+      }
+      let bestPair = null;
+      let bestDist = Infinity;
+      for (let i = 0; i < open.length; i++) {
+        for (let j = i + 1; j < open.length; j++) {
+          const d = Math.hypot(open[i].x - open[j].x, open[i].y - open[j].y);
+          if (d < bestDist) { bestDist = d; bestPair = [open[i], open[j]]; }
+        }
+      }
+      if (!bestPair || bestDist > 600) {
+        pill.classList.add("hidden");
+        return;
+      }
+      const angDiff = Math.abs(normAngle(normAngle(bestPair[1].angleDeg + 180) - bestPair[0].angleDeg));
+      pill.textContent = `Nearest open ends: ${formatLength(bestDist)} • Δ∠ ${angDiff.toFixed(1)}°`;
+      pill.classList.remove("hidden");
+    }
+
+    // -------------------------------------------------------------------------
+    // 10. HIERARCHICAL CATALOG, FAVOURITES, RECENT & SECTIONS/BOM
+    // -------------------------------------------------------------------------
+    const SCALES = ["OO9", "N", "Z", "TT", "OO/HO", "O"];
+    const CATEGORIES = [
+      { id: "All", label: "All Pieces" },
+      { id: "straight", label: "Straights" },
+      { id: "curve", label: "Curves" },
+      { id: "turnout", label: "Points & Crossovers" },
+      { id: "flex", label: "Flextrack" },
+      { id: "special", label: "Crossings & Buffers" },
+      { id: "accessory", label: "Joiners & Details" }
+    ];
+
+    function renderCatalogFilters() {
+      document.getElementById("drawer-active-scale-pill").textContent = state.filterScale;
+
+      document.getElementById("scale-pills").innerHTML = SCALES.map(sc => {
+        const active = state.filterScale === sc;
+        return `<button data-scale="${sc}" class="scale-pill px-2 py-1 rounded-lg text-[11px] font-mono font-bold transition ${
+          active ? "bg-amber-500 text-slate-950 shadow" : "bg-slate-800 text-slate-300 hover:bg-slate-700"
+        }">${sc}</button>`;
+      }).join("");
+
+      document.querySelectorAll(".scale-pill").forEach(btn => {
+        btn.addEventListener("click", () => {
+          state.filterScale = btn.dataset.scale;
+          state.filterManufacturer = "All";
+          renderCatalogFilters();
+          renderCatalogGrid();
+          saveToLocalStorage();
+        });
+      });
+
+      const mans = ["All", ...new Set(TRACK_CATALOG.filter(i => i.scale === state.filterScale).map(i => i.manufacturer))];
+      if (!mans.includes(state.filterManufacturer)) state.filterManufacturer = "All";
+
+      document.getElementById("manufacturer-pills").innerHTML = mans.map(m => {
+        const active = state.filterManufacturer === m;
+        return `<button data-man="${m}" class="man-pill px-2.5 py-1 rounded-lg text-[11px] font-semibold whitespace-nowrap transition ${
+          active ? "bg-cyan-500 text-slate-950" : "bg-slate-800/90 text-slate-300 hover:bg-slate-700"
+        }">${m}</button>`;
+      }).join("");
+
+      document.querySelectorAll(".man-pill").forEach(btn => {
+        btn.addEventListener("click", () => {
+          state.filterManufacturer = btn.dataset.man;
+          renderCatalogFilters();
+          renderCatalogGrid();
+        });
+      });
+
+      document.getElementById("category-pills").innerHTML = CATEGORIES.map(c => {
+        const active = state.filterCategory === c.id;
+        return `<button data-cat="${c.id}" class="cat-pill px-2.5 py-1 rounded-lg text-[11px] font-semibold whitespace-nowrap transition ${
+          active ? "bg-slate-200 text-slate-950" : "bg-slate-800/80 text-slate-400 hover:text-white"
+        }">${c.label}</button>`;
+      }).join("");
+
+      document.querySelectorAll(".cat-pill").forEach(btn => {
+        btn.addEventListener("click", () => {
+          state.filterCategory = btn.dataset.cat;
+          renderCatalogFilters();
+          renderCatalogGrid();
+        });
+      });
+    }
+
+    function createPieceCardHTML(item) {
+      const isFav = state.favourites.has(item.sku);
+      const spec = item.isFlex
+        ? `Flex • ${formatLength(item.lengthMm)}`
+        : item.category === "curve"
+          ? `R${item.radiusMm}mm • ${item.arcDeg}°`
+          : item.lengthMm ? `${formatLength(item.lengthMm)}` : "";
+
+      return `
+        <div data-sku="${item.sku}" class="track-card group relative flex flex-col justify-between p-2 rounded-xl bg-slate-800/85 hover:bg-slate-800 border border-slate-700/80 hover:border-amber-500/60 cursor-grab active:cursor-grabbing transition">
+          <div class="flex items-start justify-between gap-1">
+            <span class="text-[11px] font-mono font-bold text-amber-400">${item.sku}</span>
+            <button data-fav-sku="${item.sku}" class="fav-toggle-btn p-1 -m-1 rounded-lg text-slate-400 hover:text-amber-400" title="Favourite">
+              <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="${isFav ? "#fbbf24" : "none"}" stroke="${isFav ? "#fbbf24" : "currentColor"}" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+            </button>
+          </div>
+          <div class="text-[11px] font-semibold text-white leading-snug line-clamp-2 my-1">${item.name}</div>
+          <div class="flex items-center justify-between text-[10px] font-mono text-slate-400">
+            <span class="truncate">${spec}</span>
+            <span class="text-[9px] px-1 rounded bg-slate-900/80 text-slate-300">${item.scale}</span>
+          </div>
+        </div>
+      `;
+    }
+
+    function bindCardInteractions(container) {
+      container.querySelectorAll(".fav-toggle-btn").forEach(btn => {
+        btn.addEventListener("pointerdown", e => e.stopPropagation());
+        btn.addEventListener("click", e => {
+          e.stopPropagation();
+          const sku = btn.dataset.favSku;
+          if (state.favourites.has(sku)) state.favourites.delete(sku);
+          else state.favourites.add(sku);
+          updateHeaderStats();
+          renderCatalogGrid();
+          renderFavouritesTab();
+          saveToLocalStorage();
+        });
+      });
+
+      container.querySelectorAll(".track-card").forEach(card => {
+        card.addEventListener("pointerdown", e => {
+          if (e.target.closest(".fav-toggle-btn")) return;
+          const sku = card.dataset.sku;
+          const item = CATALOG_BY_SKU.get(sku);
+          if (!item) return;
+
+          state.catalogDrag = {
+            sku,
+            startX: e.clientX,
+            startY: e.clientY,
+            moved: false,
+            ghostPiece: null,
+            snap: null
+          };
+          card.setPointerCapture(e.pointerId);
+        });
+
+        card.addEventListener("pointermove", e => {
+          const cd = state.catalogDrag;
+          if (!cd || cd.sku !== card.dataset.sku) return;
+          if (!cd.moved && Math.hypot(e.clientX - cd.startX, e.clientY - cd.startY) > 10) {
+            cd.moved = true;
+            const item = CATALOG_BY_SKU.get(cd.sku);
+            document.getElementById("drag-ghost-sku").textContent = item.sku;
+            document.getElementById("drag-ghost-name").textContent = item.name;
+            document.getElementById("drag-ghost").classList.remove("hidden");
+          }
+          if (cd.moved) {
+            const ghostEl = document.getElementById("drag-ghost");
+            ghostEl.style.left = `${e.clientX}px`;
+            ghostEl.style.top = `${e.clientY}px`;
+
+            const canvasRect = canvas.getBoundingClientRect();
+            const sy = e.clientY - canvasRect.top - 36;
+            const sx = e.clientX - canvasRect.left;
+            if (sy >= 0 && sy <= canvasRect.height) {
+              const worldPt = screenToWorld(sx, sy);
+              const gp = { instanceId: "ghost", sku: cd.sku, x: worldPt.x, y: worldPt.y, rotationDeg: 0 };
+              const snap = findBestSnapForPiece(gp, new Set(), 28 / state.camera.zoom);
+              cd.ghostPiece = gp;
+              cd.snap = snap;
+              if (snap) {
+                const rotDelta = snap.deltaRot;
+                gp.rotationDeg = normAngle(gp.rotationDeg + rotDelta);
+                const mp = getPieceWorldPorts(gp).find(w => w.portId === snap.myPort.portId);
+                if (mp) {
+                  gp.x += snap.targetPort.x - mp.x;
+                  gp.y += snap.targetPort.y - mp.y;
+                }
+              }
+              requestRender();
+            } else {
+              cd.ghostPiece = null;
+              cd.snap = null;
+              requestRender();
+            }
+          }
+        });
+
+        const finishCardPointer = e => {
+          const cd = state.catalogDrag;
+          if (!cd || cd.sku !== card.dataset.sku) return;
+          state.catalogDrag = null;
+          document.getElementById("drag-ghost").classList.add("hidden");
+
+          if (cd.moved) {
+            const canvasRect = canvas.getBoundingClientRect();
+            const sy = e.clientY - canvasRect.top - 36;
+            const sx = e.clientX - canvasRect.left;
+            if (sy >= 0 && sy <= canvasRect.height) {
+              const worldPt = screenToWorld(sx, sy);
+              placeCatalogPieceAt(cd.sku, worldPt.x, worldPt.y);
+            }
+          } else {
+            placeCatalogPieceAuto(cd.sku);
+          }
+          requestRender();
+        };
+
+        card.addEventListener("pointerup", finishCardPointer);
+        card.addEventListener("pointercancel", finishCardPointer);
+      });
+    }
+
+    function recordRecent(sku) {
+      state.recent = [sku, ...state.recent.filter(x => x !== sku)].slice(0, 10);
+    }
+
+    function placeCatalogPieceAt(sku, wx, wy) {
+      const item = CATALOG_BY_SKU.get(sku);
+      if (!item) return;
+      pushUndo();
+      setActiveTool("select");
+
+      const newPiece = { instanceId: uid("trk"), sku, x: wx, y: wy, rotationDeg: 0 };
+      if (item.isFlex) {
+        newPiece.flexLengthMm = item.lengthMm || 450;
+        newPiece.flexBendDeg = 0;
+      }
+      state.pieces.push(newPiece);
+      const snap = findBestSnapForPiece(newPiece, new Set([newPiece.instanceId]), 30 / state.camera.zoom);
+      if (snap) {
+        applySnapToPiece(newPiece, snap);
+        showToast(`Connected ${item.sku}`);
+      } else {
+        showToast(`Placed ${item.sku}`);
+      }
+      state.selectedPieceId = newPiece.instanceId;
+      state.selectedPolyId = null;
+      recordRecent(sku);
+      updateSelectionUI();
+      updateHeaderStats();
+      updateCloseGapInspector();
+      refreshSectionsTab();
+      saveToLocalStorage();
+    }
+
+    function placeCatalogPieceAuto(sku) {
+      const item = CATALOG_BY_SKU.get(sku);
+      if (!item) return;
+      pushUndo();
+      setActiveTool("select");
+
+      const newPiece = { instanceId: uid("trk"), sku, x: 0, y: 0, rotationDeg: 0 };
+      if (item.isFlex) {
+        newPiece.flexLengthMm = item.lengthMm || 450;
+        newPiece.flexBendDeg = 0;
+      }
+
+      const openPorts = getOpenWorldPorts();
+      if (openPorts.length > 0) {
+        let target = openPorts[openPorts.length - 1];
+        if (state.selectedPieceId) {
+          const selOpen = openPorts.find(op => op.pieceId === state.selectedPieceId);
+          if (selOpen) target = selOpen;
+        }
+        const entryPort = getEffectivePieceGeom(newPiece).ports[0];
+        const targetHeading = normAngle(target.angleDeg + 180);
+        newPiece.rotationDeg = normAngle(targetHeading - entryPort.angleDeg);
+        state.pieces.push(newPiece);
+        const placedEntry = getPieceWorldPorts(newPiece).find(w => w.portId === entryPort.id);
+        if (placedEntry) {
+          newPiece.x += target.x - placedEntry.x;
+          newPiece.y += target.y - placedEntry.y;
+        }
+        state.connections.push({
+          id: uid("conn"),
+          pieceA: target.pieceId,
+          portA: target.portId,
+          pieceB: newPiece.instanceId,
+          portB: entryPort.id
+        });
+        showToast(`Appended ${item.sku}`);
+      } else {
+        const rect = canvas.getBoundingClientRect();
+        const center = screenToWorld(rect.width / 2, rect.height / 2);
+        newPiece.x = center.x;
+        newPiece.y = center.y;
+        state.pieces.push(newPiece);
+        showToast(`Placed ${item.sku}`);
+      }
+
+      state.selectedPieceId = newPiece.instanceId;
+      state.selectedPolyId = null;
+      recordRecent(sku);
+      updateSelectionUI();
+      updateHeaderStats();
+      updateCloseGapInspector();
+      refreshSectionsTab();
+      saveToLocalStorage();
+      requestRender();
+    }
+
+    function renderCatalogGrid() {
+      const q = state.searchQuery.trim().toLowerCase();
+      const filtered = TRACK_CATALOG.filter(item => {
+        if (item.scale !== state.filterScale) return false;
+        if (state.filterManufacturer !== "All" && item.manufacturer !== state.filterManufacturer) return false;
+        if (state.filterCategory !== "All" && item.category !== state.filterCategory) return false;
+        if (q && !item.sku.toLowerCase().includes(q) && !item.name.toLowerCase().includes(q) && !item.system.toLowerCase().includes(q)) return false;
+        return true;
+      });
+
+      const grid = document.getElementById("catalog-grid");
+      if (!filtered.length) {
+        grid.innerHTML = `<div class="col-span-full text-center text-xs text-slate-400 py-6">No matching track pieces.</div>`;
+        return;
+      }
+      grid.innerHTML = filtered.map(createPieceCardHTML).join("");
+      bindCardInteractions(grid);
+    }
+
+    function renderFavouritesTab() {
+      const tab = document.getElementById("tab-favourites");
+      const items = [...state.favourites].map(sku => CATALOG_BY_SKU.get(sku)).filter(Boolean);
+      if (!items.length) {
+        tab.innerHTML = `<div class="col-span-full text-center text-xs text-slate-400 py-6">Star any piece to save it here for quick access.</div>`;
+        return;
+      }
+      tab.innerHTML = items.map(createPieceCardHTML).join("");
+      bindCardInteractions(tab);
+    }
+
+    function renderRecentTab() {
+      const tab = document.getElementById("tab-recent");
+      const items = state.recent.map(sku => CATALOG_BY_SKU.get(sku)).filter(Boolean);
+      if (!items.length) {
+        tab.innerHTML = `<div class="col-span-full text-center text-xs text-slate-400 py-6">Recently placed pieces will appear here.</div>`;
+        return;
+      }
+      tab.innerHTML = items.map(createPieceCardHTML).join("");
+      bindCardInteractions(tab);
+    }
+
+    function renderQuickFavStrip() {
+      const wrap = document.getElementById("quick-fav-items");
+      const items = [...state.favourites].slice(0, 8).map(sku => CATALOG_BY_SKU.get(sku)).filter(Boolean);
+      wrap.innerHTML = items.map(it =>
+        `<button data-quick-sku="${it.sku}" class="quick-fav-btn px-2 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-[11px] font-mono font-bold text-amber-300 border border-slate-700 shrink-0">${it.sku}</button>`
+      ).join("");
+      wrap.querySelectorAll(".quick-fav-btn").forEach(b => {
+        b.addEventListener("click", () => placeCatalogPieceAuto(b.dataset.quickSku));
+      });
+    }
+
+    function getFilteredPiecesForScope(scopeId) {
+      if (!scopeId || scopeId === "ALL") return state.pieces;
+      const poly = state.polygons.find(p => p.id === scopeId);
+      if (!poly || poly.points.length < 3) return state.pieces;
+      return state.pieces.filter(piece => {
+        const samples = getPieceSamplePoints(piece);
+        return samples.some(pt => pointInPolygon(pt, poly.points));
+      });
+    }
+
+    function refreshSectionsTab() {
+      const scopeSelect = document.getElementById("bom-scope-select");
+      const prevScope = scopeSelect.value;
+      scopeSelect.innerHTML = `<option value="ALL">Entire Layout (${state.pieces.length})</option>` +
+        state.polygons.map(p => `<option value="${p.id}">${p.role === "boundary" ? "Board" : "Section"}: ${p.name}</option>`).join("");
+      if ([...scopeSelect.options].some(o => o.value === prevScope)) scopeSelect.value = prevScope;
+
+      const polyList = document.getElementById("polygons-summary-list");
+      if (!state.polygons.length) {
+        polyList.innerHTML = `<div class="col-span-full text-xs text-slate-400 p-2 rounded-xl bg-slate-800/50">No boards or sections yet. Tap + Board or use the Board/Section tools.</div>`;
+      } else {
+        polyList.innerHTML = state.polygons.map(poly => {
+          const count = getFilteredPiecesForScope(poly.id).length;
+          return `
+            <div data-poly-id="${poly.id}" class="poly-summary-card p-2.5 rounded-xl bg-slate-800/80 hover:bg-slate-800 border border-slate-700/80 cursor-pointer flex items-center justify-between gap-2">
+              <div class="min-w-0">
+                <div class="text-xs font-bold text-white truncate">${poly.name}</div>
+                <div class="text-[10px] font-mono ${poly.role === "boundary" ? "text-emerald-300" : "text-cyan-300"}">${poly.role.toUpperCase()} • ${formatArea(polygonAreaMm2(poly.points))}</div>
+              </div>
+              <span class="text-xs font-mono font-bold px-2 py-0.5 rounded bg-slate-900 text-amber-300 shrink-0">${count} pc</span>
+            </div>
+          `;
+        }).join("");
+
+        polyList.querySelectorAll(".poly-summary-card").forEach(card => {
+          card.addEventListener("click", () => {
+            if (state.bomFullScreen) document.getElementById("btn-bom-fullscreen").click();
+            const poly = state.polygons.find(p => p.id === card.dataset.polyId);
+            if (!poly) return;
+            setActiveTool(poly.role === "boundary" ? "poly-boundary" : "poly-section");
+            state.draftPolygon = null;
+            state.selectedPolyId = poly.id;
+            updatePolyDrawBanner();
+            updateSelectionUI();
+            requestRender();
+          });
+        });
+      }
+
+      const scopedPieces = getFilteredPiecesForScope(scopeSelect.value);
+      const counts = new Map();
+      let totalLen = 0;
+      for (const p of scopedPieces) {
+        const g = getEffectivePieceGeom(p);
+        if (!g) continue;
+        totalLen += g.lengthMm || 0;
+        counts.set(p.sku, (counts.get(p.sku) || 0) + 1);
+      }
+
+      document.getElementById("bom-totals").textContent = `${scopedPieces.length} pcs • ${formatLength(totalLen)}`;
+      const tbody = document.getElementById("bom-table-body");
+      if (!counts.size) {
+        tbody.innerHTML = `<div class="p-3 text-center text-slate-400">No pieces in this scope.</div>`;
+        return;
+      }
+
+      tbody.innerHTML = [...counts.entries()].map(([sku, qty]) => {
+        const item = CATALOG_BY_SKU.get(sku);
+        return `
+          <div class="px-3 py-2 flex items-center justify-between gap-2">
+            <div class="min-w-0">
+              <span class="font-mono font-bold text-amber-400 mr-1.5">${sku}</span>
+              <span class="text-slate-200">${item.name}</span>
+              <span class="text-[10px] text-slate-400 ml-1">(${item.system})</span>
+            </div>
+            <span class="font-mono font-bold text-white bg-slate-800 px-2 py-0.5 rounded shrink-0">×${qty}</span>
+          </div>
+        `;
+      }).join("");
+    }
+
+    // -------------------------------------------------------------------------
+    // 11. EXPORT TO PNG IMAGE, OFFLINE PDF, CSV & JSON
+    // -------------------------------------------------------------------------
+    function exportLayoutToPNG() {
+      let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+      for (const p of state.pieces) {
+        for (const pt of getPieceSamplePoints(p)) {
+          minX = Math.min(minX, pt.x); minY = Math.min(minY, pt.y);
+          maxX = Math.max(maxX, pt.x); maxY = Math.max(maxY, pt.y);
+        }
+      }
+      for (const poly of state.polygons) {
+        for (const pt of poly.points) {
+          minX = Math.min(minX, pt.x); minY = Math.min(minY, pt.y);
+          maxX = Math.max(maxX, pt.x); maxY = Math.max(maxY, pt.y);
+        }
+      }
+      if (!isFinite(minX)) {
+        showToast("Nothing on canvas to export");
+        return;
+      }
+
+      const pad = 120;
+      minX -= pad; minY -= pad; maxX += pad; maxY += pad;
+      const worldW = Math.max(maxX - minX, 300);
+      const worldH = Math.max(maxY - minY, 200);
+      const outW = 1920;
+      const sc = (outW - 80) / worldW;
+      const outH = Math.max(640, Math.round(worldH * sc + 140));
+
+      const offCanvas = document.createElement("canvas");
+      offCanvas.width = outW;
+      offCanvas.height = outH;
+      const octx = offCanvas.getContext("2d");
+
+      octx.fillStyle = "#080d18";
+      octx.fillRect(0, 0, outW, outH);
+      octx.fillStyle = "#0f172a";
+      octx.fillRect(0, 0, outW, 68);
+      octx.strokeStyle = "#334155";
+      octx.lineWidth = 2;
+      octx.beginPath();
+      octx.moveTo(0, 68);
+      octx.lineTo(outW, 68);
+      octx.stroke();
+
+      octx.fillStyle = "#f59e0b";
+      octx.font = "bold 24px Inter, sans-serif";
+      octx.fillText(`RAILFORGE • ${state.title}`, 28, 42);
+
+      let totalLen = 0;
+      state.pieces.forEach(p => { const g = getEffectivePieceGeom(p); if (g) totalLen += g.lengthMm || 0; });
+      octx.fillStyle = "#94a3b8";
+      octx.font = "600 16px 'JetBrains Mono', monospace";
+      octx.textAlign = "right";
+      octx.fillText(`Scale: ${state.filterScale} | Pieces: ${state.pieces.length} | Length: ${formatLength(totalLen)}`, outW - 28, 42);
+      octx.textAlign = "left";
+
+      octx.save();
+      octx.translate(40 - minX * sc, 92 - minY * sc);
+      octx.scale(sc, sc);
+
+      for (const poly of state.polygons) {
+        if (!poly.points || poly.points.length < 3) continue;
+        octx.beginPath();
+        poly.points.forEach((pt, idx) => idx === 0 ? octx.moveTo(pt.x, pt.y) : octx.lineTo(pt.x, pt.y));
+        octx.closePath();
+        octx.fillStyle = poly.role === "boundary" ? "rgba(16, 185, 129, 0.08)" : "rgba(6, 182, 212, 0.1)";
+        octx.strokeStyle = poly.role === "boundary" ? "#10b981" : "#06b6d4";
+        octx.lineWidth = 2.5 / sc;
+        octx.fill();
+        octx.stroke();
+      }
+
+      for (const piece of state.pieces) {
+        const item = getEffectivePieceGeom(piece);
+        if (!item) continue;
+        const gauge = item.gaugeMm;
+        octx.save();
+        octx.translate(piece.x, piece.y);
+        octx.rotate(piece.rotationDeg * DEG2RAD);
+        if (item.roadbed) {
+          octx.strokeStyle = "#334155";
+          octx.lineWidth = gauge * 2.35;
+          octx.beginPath();
+          for (const seg of item.segments) {
+            if (seg.type === "line") { octx.moveTo(seg.x1, seg.y1); octx.lineTo(seg.x2, seg.y2); }
+            else { octx.moveTo(seg.cx + seg.r * Math.cos(seg.startDeg * DEG2RAD), seg.cy + seg.r * Math.sin(seg.startDeg * DEG2RAD)); octx.arc(seg.cx, seg.cy, seg.r, seg.startDeg * DEG2RAD, seg.endDeg * DEG2RAD, false); }
+          }
+          octx.stroke();
+        }
+        octx.strokeStyle = "#f8fafc";
+        octx.lineWidth = Math.max(gauge * 0.14, 1.2);
+        for (const seg of item.segments) {
+          if (seg.type === "line") {
+            const dx = seg.x2 - seg.x1, dy = seg.y2 - seg.y1, len = Math.hypot(dx, dy) || 1;
+            const nx = (-dy / len) * (gauge / 2), ny = (dx / len) * (gauge / 2);
+            octx.beginPath();
+            octx.moveTo(seg.x1 + nx, seg.y1 + ny); octx.lineTo(seg.x2 + nx, seg.y2 + ny);
+            octx.moveTo(seg.x1 - nx, seg.y1 - ny); octx.lineTo(seg.x2 - nx, seg.y2 - ny);
+            octx.stroke();
+          } else {
+            octx.beginPath();
+            octx.arc(seg.cx, seg.cy, seg.r + gauge / 2, seg.startDeg * DEG2RAD, seg.endDeg * DEG2RAD, false);
+            octx.stroke();
+            octx.beginPath();
+            octx.arc(seg.cx, seg.cy, Math.max(1, seg.r - gauge / 2), seg.startDeg * DEG2RAD, seg.endDeg * DEG2RAD, false);
+            octx.stroke();
+          }
+        }
+        octx.restore();
+      }
+      octx.restore();
+
+      offCanvas.toBlob(blob => {
+        if (!blob) return;
+        const a = document.createElement("a");
+        a.href = URL.createObjectURL(blob);
+        a.download = `railforge-layout-${Date.now()}.png`;
+        a.click();
+        showToast("Layout PNG downloaded");
+      }, "image/png");
+    }
+
+    function exportPartsListToPDF() {
+      const scopeSelect = document.getElementById("bom-scope-select");
+      const scopeId = scopeSelect.value;
+      const scopeLabel = scopeSelect.options[scopeSelect.selectedIndex]?.text || "Entire Layout";
+      const scopedPieces = getFilteredPiecesForScope(scopeId);
+
+      const counts = new Map();
+      let totalLen = 0;
+      for (const p of scopedPieces) {
+        const g = getEffectivePieceGeom(p);
+        if (!g) continue;
+        totalLen += g.lengthMm || 0;
+        counts.set(p.sku, (counts.get(p.sku) || 0) + 1);
+      }
+
+      const escPdf = str => String(str).replace(/\\/g, "\\\\").replace(/\(/g, "\\(").replace(/\)/g, "\\)").replace(/[^\x20-\x7E]/g, "-");
+      const lines = [
+        "BT",
+        "/F2 18 Tf 45 785 Td (RAILFORGE - MODEL RAILWAY PARTS LIST) Tj",
+        "/F1 11 Tf 0 -22 Td (" + escPdf(`Layout: ${state.title}   |   Scale: ${state.filterScale}`) + ") Tj",
+        "0 -16 Td (" + escPdf(`Scope: ${scopeLabel}   |   Pieces: ${scopedPieces.length}   |   Length: ${formatLength(totalLen)}`) + ") Tj",
+        "0 -16 Td (" + escPdf(`Date: ${new Date().toLocaleDateString()}`) + ") Tj",
+        "/F2 10 Tf 0 -28 Td (SKU          SYSTEM                    DESCRIPTION                               QTY) Tj",
+        "/F1 10 Tf 0 -12 Td (------------------------------------------------------------------------------------------) Tj"
+      ];
+
+      let rowCount = 0;
+      for (const [sku, qty] of counts.entries()) {
+        if (rowCount >= 42) {
+          lines.push("0 -16 Td (... more items in full CSV/JSON export ...) Tj");
+          break;
+        }
+        const it = CATALOG_BY_SKU.get(sku);
+        const rowText = `${sku.padEnd(12, " ").slice(0, 12)} ${(it.system || "").padEnd(25, " ").slice(0, 25)} ${(it.name || "").padEnd(41, " ").slice(0, 41)} x${qty}`;
+        lines.push("0 -15 Td (" + escPdf(rowText) + ") Tj");
+        rowCount++;
+      }
+      if (!counts.size) lines.push("0 -20 Td (No track pieces in selected scope.) Tj");
+      lines.push("ET");
+
+      const streamContent = lines.join("\n");
+      const objs = [
+        "1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n",
+        "2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n",
+        "3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Contents 4 0 R /Resources << /Font << /F1 5 0 R /F2 6 0 R >> >> >>\nendobj\n",
+        `4 0 obj\n<< /Length ${streamContent.length} >>\nstream\n${streamContent}\nendstream\nendobj\n`,
+        "5 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Courier >>\nendobj\n",
+        "6 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Courier-Bold >>\nendobj\n"
+      ];
+
+      let pdf = "%PDF-1.4\n";
+      const offsets = [0];
+      for (const obj of objs) { offsets.push(pdf.length); pdf += obj; }
+      const xrefStart = pdf.length;
+      pdf += `xref\n0 ${objs.length + 1}\n0000000000 65535 f \n`;
+      for (let i = 1; i <= objs.length; i++) pdf += String(offsets[i]).padStart(10, "0") + " 00000 n \n";
+      pdf += `trailer\n<< /Size ${objs.length + 1} /Root 1 0 R >>\nstartxref\n${xrefStart}\n%%EOF`;
+
+      const blob = new Blob([pdf], { type: "application/pdf" });
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = `railforge-parts-${scopeId.toLowerCase()}.pdf`;
+      a.click();
+      showToast("Parts list PDF downloaded");
+    }
+
+    function downloadTextFile(filename, content, mime = "text/plain") {
+      const blob = new Blob([content], { type: mime });
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = filename;
+      a.click();
+    }
+
+    // -------------------------------------------------------------------------
+    // 12. STARTER PRESETS (INCLUDING RAVENGLASS & MURTHWAITE OO9) & EVENT WIRING
+    // -------------------------------------------------------------------------
+    function loadPreset(presetKey) {
+      pushUndo();
+      state.pieces = [];
+      state.connections = [];
+      state.polygons = [];
+      state.selectedPieceId = null;
+      state.selectedPolyId = null;
+
+      const appendTo = (prevId, prevPortId, sku) => {
+        const prev = state.pieces.find(p => p.instanceId === prevId);
+        const target = getPieceWorldPorts(prev).find(w => w.portId === prevPortId);
+        const np = { instanceId: uid("trk"), sku, x: 0, y: 0, rotationDeg: 0 };
+        const entry = getEffectivePieceGeom(np).ports[0];
+        np.rotationDeg = normAngle(normAngle(target.angleDeg + 180) - entry.angleDeg);
+        state.pieces.push(np);
+        const pe = getPieceWorldPorts(np).find(w => w.portId === entry.id);
+        np.x += target.x - pe.x;
+        np.y += target.y - pe.y;
+        state.connections.push({ id: uid("conn"), pieceA: prevId, portA: prevPortId, pieceB: np.instanceId, portB: entry.id });
+        return np;
+      };
+
+      if (presetKey === "oo9-ravenglass") {
+        state.filterScale = "OO9";
+        state.title = "Ravenglass & Murthwaite OO9";
+        state.polygons.push({
+          id: uid("poly"), name: "Ravenglass Baseboard", role: "boundary",
+          points: [{ x: -80, y: -90 }, { x: 1620, y: -90 }, { x: 1620, y: 780 }, { x: -80, y: 780 }]
+        });
+        state.polygons.push({
+          id: uid("poly"), name: "Station & Shed Throat", role: "section",
+          points: [{ x: -40, y: -50 }, { x: 860, y: -50 }, { x: 860, y: 420 }, { x: -40, y: 420 }]
+        });
+        state.polygons.push({
+          id: uid("poly"), name: "Depot & Carriage Roads", role: "section",
+          points: [{ x: 880, y: -50 }, { x: 1580, y: -50 }, { x: 1580, y: 740 }, { x: 880, y: 740 }]
+        });
+
+        const main1 = { instanceId: uid("trk"), sku: "ST-411", x: 140, y: 120, rotationDeg: 0 };
+        state.pieces.push(main1);
+        const pt1 = appendTo(main1.instanceId, "p1", "SLE495");
+        const main2 = appendTo(pt1.instanceId, "p1", "ST-411");
+        appendTo(main2.instanceId, "p1", "SL-440");
+
+        const siding1 = appendTo(pt1.instanceId, "p2", "ST-401");
+        const pt2 = appendTo(siding1.instanceId, "p1", "SLE496");
+        appendTo(pt2.instanceId, "p1", "SL-440");
+        const shedRoad = appendTo(pt2.instanceId, "p2", "ST-401");
+        appendTo(shedRoad.instanceId, "p1", "SL-440");
+      } else if (presetKey === "n-peco") {
+        state.filterScale = "N";
+        state.title = "PECO N Setrack & Streamline Loop";
+        state.polygons.push({
+          id: uid("poly"), name: "N Tabletop Board", role: "boundary",
+          points: [{ x: -80, y: -80 }, { x: 1180, y: -80 }, { x: 1180, y: 740 }, { x: -80, y: 740 }]
+        });
+        const p1 = { instanceId: uid("trk"), sku: "ST-11", x: 260, y: 0, rotationDeg: 0 };
+        state.pieces.push(p1);
+        let curr = p1;
+        for (let i = 0; i < 4; i++) curr = appendTo(curr.instanceId, "p1", "ST-12");
+        curr = appendTo(curr.instanceId, "p1", "ST-11");
+        for (let i = 0; i < 4; i++) curr = appendTo(curr.instanceId, "p1", "ST-12");
+      } else if (presetKey === "oo-oval") {
+        state.filterScale = "OO/HO";
+        state.title = "OO Oval Mainline";
+        state.polygons.push({
+          id: uid("poly"), name: "Main Baseboard", role: "boundary",
+          points: [{ x: -120, y: -120 }, { x: 1850, y: -120 }, { x: 1850, y: 1120 }, { x: -120, y: 1120 }]
+        });
+        const p1 = { instanceId: uid("trk"), sku: "R601", x: 420, y: 0, rotationDeg: 0 };
+        state.pieces.push(p1);
+        let curr = appendTo(p1.instanceId, "p1", "R600");
+        for (let i = 0; i < 8; i++) curr = appendTo(curr.instanceId, "p1", "R604");
+        curr = appendTo(curr.instanceId, "p1", "R601");
+        curr = appendTo(curr.instanceId, "p1", "R600");
+        for (let i = 0; i < 8; i++) curr = appendTo(curr.instanceId, "p1", "R604");
+      } else if (presetKey === "tt-hornby") {
+        state.filterScale = "TT";
+        state.title = "TT:120 Oval";
+        state.polygons.push({
+          id: uid("poly"), name: "TT Baseboard", role: "boundary",
+          points: [{ x: -80, y: -80 }, { x: 1270, y: -80 }, { x: 1270, y: 720 }, { x: -80, y: 720 }]
+        });
+        const p1 = { instanceId: uid("trk"), sku: "TT8001", x: 310, y: 0, rotationDeg: 0 };
+        state.pieces.push(p1);
+        let curr = p1;
+        for (let i = 0; i < 6; i++) curr = appendTo(curr.instanceId, "p1", "TT8004");
+        curr = appendTo(curr.instanceId, "p1", "TT8001");
+        for (let i = 0; i < 6; i++) curr = appendTo(curr.instanceId, "p1", "TT8004");
+      } else if (presetKey === "z-marklin") {
+        state.filterScale = "Z";
+        state.title = "Z Scale Briefcase Loop";
+        state.polygons.push({
+          id: uid("poly"), name: "Briefcase Shell", role: "boundary",
+          points: [{ x: -40, y: -40 }, { x: 660, y: -40 }, { x: 660, y: 440 }, { x: -40, y: 440 }]
+        });
+        const p1 = { instanceId: uid("trk"), sku: "8500", x: 200, y: 0, rotationDeg: 0 };
+        state.pieces.push(p1);
+        let curr = p1;
+        for (let i = 0; i < 4; i++) curr = appendTo(curr.instanceId, "p1", "8520");
+        curr = appendTo(curr.instanceId, "p1", "8500");
+        for (let i = 0; i < 4; i++) curr = appendTo(curr.instanceId, "p1", "8520");
+      } else if (presetKey === "o-lionel") {
+        state.filterScale = "O";
+        state.title = "O Scale FasTrack O36";
+        state.polygons.push({
+          id: uid("poly"), name: "O Baseboard", role: "boundary",
+          points: [{ x: -120, y: -120 }, { x: 1650, y: -120 }, { x: 1650, y: 1150 }, { x: -120, y: 1150 }]
+        });
+        const p1 = { instanceId: uid("trk"), sku: "6-12014", x: 420, y: 0, rotationDeg: 0 };
+        state.pieces.push(p1);
+        let curr = p1;
+        for (let i = 0; i < 4; i++) curr = appendTo(curr.instanceId, "p1", "6-12015");
+        curr = appendTo(curr.instanceId, "p1", "6-12014");
+        for (let i = 0; i < 4; i++) curr = appendTo(curr.instanceId, "p1", "6-12015");
+      }
+
+      document.getElementById("layout-title-display").textContent = state.title;
+      renderCatalogFilters();
+      renderCatalogGrid();
+      updateSelectionUI();
+      updateHeaderStats();
+      updateCloseGapInspector();
+      refreshSectionsTab();
+      saveToLocalStorage();
+      fitLayoutToScreen();
+      showToast(`Loaded ${state.title}`);
+    }
+
+    function fitLayoutToScreen() {
+      const container = document.getElementById("canvas-container");
+      if (!container) return;
+      const rect = container.getBoundingClientRect();
+      let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+      for (const p of state.pieces) {
+        for (const pt of getPieceSamplePoints(p)) {
+          minX = Math.min(minX, pt.x); minY = Math.min(minY, pt.y);
+          maxX = Math.max(maxX, pt.x); maxY = Math.max(maxY, pt.y);
+        }
+      }
+      for (const poly of state.polygons) {
+        for (const pt of poly.points) {
+          minX = Math.min(minX, pt.x); minY = Math.min(minY, pt.y);
+          maxX = Math.max(maxX, pt.x); maxY = Math.max(maxY, pt.y);
+        }
+      }
+      if (!isFinite(minX)) {
+        state.camera = { panX: rect.width * 0.25, panY: rect.height * 0.25, zoom: 0.75 };
+        requestRender();
+        return;
+      }
+      const pad = 60;
+      const w = Math.max(maxX - minX, 100);
+      const h = Math.max(maxY - minY, 100);
+      const zoom = Math.min(2.5, Math.max(0.12, Math.min((rect.width - pad * 2) / w, (rect.height - pad * 2) / h)));
+      state.camera.zoom = zoom;
+      state.camera.panX = (rect.width - w * zoom) / 2 - minX * zoom;
+      state.camera.panY = (rect.height - h * zoom) / 2 - minY * zoom;
+      requestRender();
+    }
+
+    function switchDrawerTab(tabId) {
+      state.drawerTab = tabId;
+      document.querySelectorAll(".drawer-tab").forEach(btn => {
+        const active = btn.dataset.tab === tabId;
+        btn.className = active
+          ? "drawer-tab relative p-2 rounded-lg bg-amber-500 text-slate-950 transition"
+          : "drawer-tab relative p-2 rounded-lg text-slate-300 hover:bg-slate-800 transition";
+      });
+      ["catalog", "favourites", "recent", "sections"].forEach(id => {
+        document.getElementById(`tab-${id}`).classList.toggle("hidden", id !== tabId);
+      });
+      const drawer = document.getElementById("bottom-drawer");
+      if (drawer.getBoundingClientRect().height < 140) {
+        drawer.style.height = "38vh";
+        state.drawerHeightPx = null;
+        resizeCanvas();
+      }
+      if (tabId === "sections") refreshSectionsTab();
+      if (tabId === "favourites") renderFavouritesTab();
+      if (tabId === "recent") renderRecentTab();
+    }
+
+    function wireEvents() {
+      window.addEventListener("resize", () => {
+        if (!state.bomFullScreen) resizeCanvas();
+      });
+
+      document.getElementById("btn-undo").addEventListener("click", undo);
+      document.getElementById("btn-redo").addEventListener("click", redo);
+
+      document.getElementById("btn-unit").addEventListener("click", () => {
+        state.unitSystem = state.unitSystem === "metric" ? "imperial" : "metric";
+        document.getElementById("btn-unit").textContent = state.unitSystem === "metric" ? "mm" : "in";
+        document.querySelectorAll(".shape-unit-lbl").forEach(el => el.textContent = state.unitSystem === "metric" ? "mm" : "in");
+        updateHeaderStats();
+        updateSelectionUI();
+        updateCloseGapInspector();
+        refreshSectionsTab();
+        requestRender();
+      });
+
+      document.getElementById("btn-export-png").addEventListener("click", exportLayoutToPNG);
+
+      document.querySelectorAll(".tool-btn").forEach(btn => {
+        btn.addEventListener("click", () => setActiveTool(btn.dataset.tool));
+      });
+
+      document.getElementById("btn-group-mode").addEventListener("click", () => {
+        state.groupMoveMode = !state.groupMoveMode;
+        document.getElementById("group-mode-label").textContent = state.groupMoveMode ? "Group Move" : "Single Piece";
+        showToast(state.groupMoveMode ? "Group move enabled" : "Single piece detach mode");
+        updateSelectionUI();
+        requestRender();
+      });
+
+      document.getElementById("btn-snap-90").addEventListener("click", () => {
+        state.snap90Mode = !state.snap90Mode;
+        const btn = document.getElementById("btn-snap-90");
+        btn.className = state.snap90Mode
+          ? "flex items-center gap-1 px-2.5 py-2 rounded-xl bg-emerald-500/20 border border-emerald-500/50 text-xs font-mono font-semibold text-emerald-300 shadow-lg active:scale-95 transition"
+          : "flex items-center gap-1 px-2.5 py-2 rounded-xl bg-forge-900/90 border border-slate-700 text-xs font-mono font-semibold text-slate-400 shadow-lg active:scale-95 transition";
+        updatePolyDrawBanner();
+        showToast(state.snap90Mode ? "90° corner snapping ON" : "90° corner snapping OFF");
+      });
+
+      const openShapeModal = () => document.getElementById("shape-board-modal").classList.remove("hidden");
+      document.getElementById("btn-open-shape-modal").addEventListener("click", openShapeModal);
+      document.getElementById("btn-bom-add-board").addEventListener("click", openShapeModal);
+      document.getElementById("btn-close-shape-modal").addEventListener("click", () => {
+        document.getElementById("shape-board-modal").classList.add("hidden");
+      });
+
+      document.querySelectorAll(".shape-type-btn").forEach(btn => {
+        btn.addEventListener("click", () => {
+          state.selectedShapeType = btn.dataset.shape;
+          document.querySelectorAll(".shape-type-btn").forEach(b => {
+            b.className = b.dataset.shape === state.selectedShapeType
+              ? "shape-type-btn py-2 px-2.5 rounded-xl bg-amber-500 text-slate-950 font-bold"
+              : "shape-type-btn py-2 px-2.5 rounded-xl bg-slate-800 text-slate-300 font-semibold";
+          });
+          const needsWing = state.selectedShapeType === "l-shape" || state.selectedShapeType === "u-shape";
+          document.getElementById("field-wing-w").classList.toggle("hidden", !needsWing);
+          document.getElementById("field-wing-d").classList.toggle("hidden", !needsWing);
+        });
+      });
+
+      document.getElementById("btn-insert-shape-board").addEventListener("click", () => {
+        insertStandardShapeBoard();
+        document.getElementById("shape-board-modal").classList.add("hidden");
+      });
+
+      document.getElementById("btn-edge-apply").addEventListener("click", applyEdgeDimensionEdit);
+      document.getElementById("btn-edge-cancel").addEventListener("click", () => {
+        state.editingEdge = null;
+        document.getElementById("edge-dim-popover").classList.add("hidden");
+      });
+      document.getElementById("inp-edge-len").addEventListener("keydown", e => {
+        if (e.key === "Enter") applyEdgeDimensionEdit();
+        if (e.key === "Escape") {
+          state.editingEdge = null;
+          document.getElementById("edge-dim-popover").classList.add("hidden");
+        }
+      });
+
+      document.getElementById("btn-zoom-in").addEventListener("click", () => {
+        state.camera.zoom = Math.min(8, state.camera.zoom * 1.2);
+        requestRender();
+      });
+      document.getElementById("btn-zoom-out").addEventListener("click", () => {
+        state.camera.zoom = Math.max(0.1, state.camera.zoom / 1.2);
+        requestRender();
+      });
+      document.getElementById("btn-fit").addEventListener("click", fitLayoutToScreen);
+      document.getElementById("btn-toggle-ports").addEventListener("click", () => {
+        state.showOpenPorts = !state.showOpenPorts;
+        requestRender();
+      });
+
+      document.getElementById("btn-poly-undo-pt").addEventListener("click", () => {
+        if (state.draftPolygon && state.draftPolygon.points.length) {
+          state.draftPolygon.points.pop();
+          updatePolyDrawBanner();
+          requestRender();
+        }
+      });
+      document.getElementById("btn-poly-close").addEventListener("click", finishDraftPolygon);
+      document.getElementById("btn-poly-cancel").addEventListener("click", () => {
+        state.draftPolygon = { role: state.activeTool === "poly-boundary" ? "boundary" : "section", points: [] };
+        updatePolyDrawBanner();
+        requestRender();
+      });
+
+      document.querySelectorAll(".rot-step-btn").forEach(btn => {
+        btn.addEventListener("click", () => {
+          if (!state.selectedPieceId) return;
+          pushUndo();
+          const delta = parseFloat(btn.dataset.rot);
+          const group = state.groupMoveMode ? getConnectedGroup(state.selectedPieceId) : new Set([state.selectedPieceId]);
+          rotateGroupAround(group, getGroupBoundingCenter(group), delta);
+          updateSelectionUI();
+          updateCloseGapInspector();
+          saveToLocalStorage();
+          requestRender();
+        });
+      });
+
+      document.getElementById("inp-sel-angle").addEventListener("change", e => {
+        if (!state.selectedPieceId) return;
+        const p = state.pieces.find(x => x.instanceId === state.selectedPieceId);
+        if (!p) return;
+        pushUndo();
+        const target = normAngle(parseFloat(e.target.value) || 0);
+        const delta = normAngle(target - p.rotationDeg);
+        const group = state.groupMoveMode ? getConnectedGroup(p.instanceId) : new Set([p.instanceId]);
+        rotateGroupAround(group, getGroupBoundingCenter(group), delta);
+        updateSelectionUI();
+        updateCloseGapInspector();
+        saveToLocalStorage();
+        requestRender();
+      });
+
+      document.getElementById("btn-sel-disconnect").addEventListener("click", () => {
+        if (!state.selectedPieceId) return;
+        pushUndo();
+        if (disconnectPiece(state.selectedPieceId)) {
+          showToast("Disconnected piece from group");
+          updateSelectionUI();
+          saveToLocalStorage();
+          requestRender();
+        }
+      });
+
+      document.getElementById("btn-sel-fav").addEventListener("click", () => {
+        if (!state.selectedPieceId) return;
+        const p = state.pieces.find(x => x.instanceId === state.selectedPieceId);
+        if (!p) return;
+        if (state.favourites.has(p.sku)) state.favourites.delete(p.sku);
+        else state.favourites.add(p.sku);
+        updateSelectionUI();
+        updateHeaderStats();
+        renderCatalogGrid();
+        renderFavouritesTab();
+        saveToLocalStorage();
+      });
+
+      document.getElementById("btn-sel-duplicate").addEventListener("click", () => {
+        if (!state.selectedPieceId) return;
+        const p = state.pieces.find(x => x.instanceId === state.selectedPieceId);
+        if (!p) return;
+        pushUndo();
+        const copy = { ...p, instanceId: uid("trk"), x: p.x + 45, y: p.y + 45 };
+        state.pieces.push(copy);
+        state.selectedPieceId = copy.instanceId;
+        updateSelectionUI();
+        updateHeaderStats();
+        refreshSectionsTab();
+        saveToLocalStorage();
+        requestRender();
+      });
+
+      document.getElementById("btn-sel-delete").addEventListener("click", () => {
+        if (!state.selectedPieceId) return;
+        pushUndo();
+        const id = state.selectedPieceId;
+        disconnectPiece(id);
+        state.pieces = state.pieces.filter(x => x.instanceId !== id);
+        state.selectedPieceId = null;
+        updateSelectionUI();
+        updateHeaderStats();
+        updateCloseGapInspector();
+        refreshSectionsTab();
+        saveToLocalStorage();
+        requestRender();
+      });
+
+      document.getElementById("inp-flex-len").addEventListener("input", e => {
+        const p = state.pieces.find(x => x.instanceId === state.selectedPieceId);
+        if (!p) return;
+        p.flexLengthMm = parseFloat(e.target.value);
+        document.getElementById("flex-len-val").textContent = formatLength(p.flexLengthMm);
+        updateHeaderStats();
+        updateCloseGapInspector();
+        requestRender();
+      });
+      document.getElementById("inp-flex-len").addEventListener("change", saveToLocalStorage);
+
+      document.getElementById("inp-flex-bend").addEventListener("input", e => {
+        const p = state.pieces.find(x => x.instanceId === state.selectedPieceId);
+        if (!p) return;
+        p.flexBendDeg = parseFloat(e.target.value);
+        document.getElementById("flex-bend-val").textContent = `${Math.round(p.flexBendDeg)}°`;
+        updateCloseGapInspector();
+        requestRender();
+      });
+      document.getElementById("inp-flex-bend").addEventListener("change", saveToLocalStorage);
+
+      document.getElementById("btn-flex-bridge").addEventListener("click", () => {
+        const p = state.pieces.find(x => x.instanceId === state.selectedPieceId);
+        if (!p) return;
+        const wp0 = getPieceWorldPorts(p).find(w => w.portId === "p0");
+        const openOthers = getOpenWorldPorts(new Set([p.instanceId]));
+        if (!wp0 || !openOthers.length) {
+          showToast("No other open port available to bridge");
+          return;
+        }
+        let nearest = openOthers[0], minD = Infinity;
+        for (const op of openOthers) {
+          const d = Math.hypot(op.x - wp0.x, op.y - wp0.y);
+          if (d < minD) { minD = d; nearest = op; }
+        }
+        pushUndo();
+        p.flexLengthMm = Math.max(25, Math.round(minD));
+        p.flexBendDeg = 0;
+        p.rotationDeg = Math.atan2(nearest.y - wp0.y, nearest.x - wp0.x) * RAD2DEG;
+        autoConnectAllCoincidentPorts(3.0, 180);
+        updateSelectionUI();
+        updateHeaderStats();
+        updateCloseGapInspector();
+        saveToLocalStorage();
+        requestRender();
+        showToast(`Flextrack bridged (${formatLength(p.flexLengthMm)})`);
+      });
+
+      document.getElementById("inp-poly-name").addEventListener("input", e => {
+        const poly = state.polygons.find(p => p.id === state.selectedPolyId);
+        if (poly) {
+          poly.name = e.target.value;
+          refreshSectionsTab();
+          saveToLocalStorage();
+          requestRender();
+        }
+      });
+
+      document.getElementById("btn-poly-delete").addEventListener("click", () => {
+        if (!state.selectedPolyId) return;
+        pushUndo();
+        state.polygons = state.polygons.filter(p => p.id !== state.selectedPolyId);
+        state.selectedPolyId = null;
+        updateSelectionUI();
+        refreshSectionsTab();
+        saveToLocalStorage();
+        requestRender();
+      });
+
+      document.querySelectorAll(".drawer-tab").forEach(tab => {
+        tab.addEventListener("click", () => switchDrawerTab(tab.dataset.tab));
+      });
+
+      document.getElementById("btn-toggle-filters").addEventListener("click", () => {
+        state.filtersOpen = !state.filtersOpen;
+        const panel = document.getElementById("catalog-filters-panel");
+        const btn = document.getElementById("btn-toggle-filters");
+        panel.classList.toggle("hidden", !state.filtersOpen);
+        btn.className = state.filtersOpen
+          ? "p-2 rounded-lg bg-amber-500 text-slate-950 border border-amber-400 transition"
+          : "p-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition";
+      });
+
+      const drawer = document.getElementById("bottom-drawer");
+      const dragHandle = document.getElementById("drawer-drag-handle");
+      let drawerDrag = null;
+
+      dragHandle.addEventListener("pointerdown", e => {
+        dragHandle.setPointerCapture(e.pointerId);
+        drawerDrag = { startY: e.clientY, startH: drawer.getBoundingClientRect().height };
+      });
+      dragHandle.addEventListener("pointermove", e => {
+        if (!drawerDrag) return;
+        const deltaY = drawerDrag.startY - e.clientY;
+        const newH = Math.min(Math.round(window.innerHeight * 0.88), Math.max(54, drawerDrag.startH + deltaY));
+        drawer.style.height = `${newH}px`;
+        state.drawerHeightPx = newH;
+        resizeCanvas();
+      });
+      const endDrawerDrag = () => {
+        if (!drawerDrag) return;
+        drawerDrag = null;
+        updateSelectionUI();
+        resizeCanvas();
+      };
+      dragHandle.addEventListener("pointerup", endDrawerDrag);
+      dragHandle.addEventListener("pointercancel", endDrawerDrag);
+
+      document.getElementById("btn-bom-fullscreen").addEventListener("click", () => {
+        state.bomFullScreen = !state.bomFullScreen;
+        const tabSections = document.getElementById("tab-sections");
+        if (state.bomFullScreen) {
+          tabSections.classList.add("fixed", "inset-0", "z-50", "p-4");
+          drawer.style.height = "100vh";
+        } else {
+          tabSections.classList.remove("fixed", "inset-0", "z-50", "p-4");
+          drawer.style.height = state.drawerHeightPx ? `${state.drawerHeightPx}px` : "38vh";
+          resizeCanvas();
+        }
+      });
+
+      document.getElementById("catalog-search").addEventListener("input", e => {
+        state.searchQuery = e.target.value;
+        renderCatalogGrid();
+      });
+
+      document.getElementById("bom-scope-select").addEventListener("change", refreshSectionsTab);
+      document.getElementById("btn-export-pdf").addEventListener("click", exportPartsListToPDF);
+
+      document.getElementById("btn-export-csv").addEventListener("click", () => {
+        const scopeId = document.getElementById("bom-scope-select").value;
+        const scoped = getFilteredPiecesForScope(scopeId);
+        const counts = new Map();
+        for (const p of scoped) counts.set(p.sku, (counts.get(p.sku) || 0) + 1);
+        const rows = ["SKU,Scale,Manufacturer,System,Name,Quantity"];
+        for (const [sku, qty] of counts.entries()) {
+          const it = CATALOG_BY_SKU.get(sku);
+          rows.push(`"${it.sku}","${it.scale}","${it.manufacturer}","${it.system}","${it.name}",${qty}`);
+        }
+        downloadTextFile("railforge-parts.csv", rows.join("\n"), "text/csv");
+        showToast("Exported CSV");
+      });
+
+      document.getElementById("btn-export-json").addEventListener("click", () => {
+        downloadTextFile("railforge-layout.json", JSON.stringify({
+          title: state.title,
+          scale: state.filterScale,
+          unitSystem: state.unitSystem,
+          pieces: state.pieces,
+          connections: state.connections,
+          polygons: state.polygons
+        }, null, 2), "application/json");
+        showToast("Exported JSON");
+      });
+
+      const layoutsModal = document.getElementById("layouts-modal");
+      document.getElementById("btn-layouts-modal").addEventListener("click", () => {
+        document.getElementById("inp-layout-title").value = state.title;
+        layoutsModal.classList.remove("hidden");
+      });
+      document.getElementById("btn-close-layouts-modal").addEventListener("click", () => layoutsModal.classList.add("hidden"));
+
+      document.getElementById("btn-save-title").addEventListener("click", () => {
+        const val = document.getElementById("inp-layout-title").value.trim();
+        if (val) {
+          pushUndo();
+          state.title = val;
+          document.getElementById("layout-title-display").textContent = val;
+          saveToLocalStorage();
+          showToast("Title saved");
+        }
+      });
+
+      document.querySelectorAll(".preset-btn").forEach(btn => {
+        btn.addEventListener("click", () => {
+          loadPreset(btn.dataset.preset);
+          layoutsModal.classList.add("hidden");
+        });
+      });
+
+      document.getElementById("inp-import-json").addEventListener("change", e => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = () => {
+          try {
+            const d = JSON.parse(String(reader.result));
+            if (!Array.isArray(d.pieces)) { showToast("Invalid layout JSON"); return; }
+            pushUndo();
+            state.title = d.title || file.name.replace(/\.json$/i, "");
+            state.pieces = d.pieces;
+            state.connections = Array.isArray(d.connections) ? d.connections : [];
+            state.polygons = Array.isArray(d.polygons) ? d.polygons : [];
+            if (d.scale && SCALES.includes(d.scale)) state.filterScale = d.scale;
+            document.getElementById("layout-title-display").textContent = state.title;
+            renderCatalogFilters();
+            renderCatalogGrid();
+            updateSelectionUI();
+            updateHeaderStats();
+            updateCloseGapInspector();
+            refreshSectionsTab();
+            saveToLocalStorage();
+            fitLayoutToScreen();
+            layoutsModal.classList.add("hidden");
+            showToast("Imported layout");
+          } catch (_) {
+            showToast("Could not parse JSON");
+          }
+        };
+        reader.readAsText(file);
+        e.target.value = "";
+      });
+
+      document.getElementById("btn-clear-layout").addEventListener("click", () => {
+        pushUndo();
+        state.pieces = [];
+        state.connections = [];
+        state.polygons = [];
+        state.selectedPieceId = null;
+        state.selectedPolyId = null;
+        updateSelectionUI();
+        updateHeaderStats();
+        updateCloseGapInspector();
+        refreshSectionsTab();
+        saveToLocalStorage();
+        requestRender();
+        layoutsModal.classList.add("hidden");
+        showToast("Canvas cleared");
+      });
+    }
+
+    // -------------------------------------------------------------------------
+    // 13. INITIALIZATION
+    // -------------------------------------------------------------------------
+    window.addEventListener("load", () => {
+      wireEvents();
+      const restored = loadFromLocalStorage();
+      document.getElementById("layout-title-display").textContent = state.title;
+      document.getElementById("btn-unit").textContent = state.unitSystem === "metric" ? "mm" : "in";
+      renderCatalogFilters();
+      renderCatalogGrid();
+      updateHeaderStats();
+      updateCloseGapInspector();
+      updateUndoRedoButtons();
+      resizeCanvas();
+
+      if (!restored) {
+        loadPreset("oo9-ravenglass");
+      } else {
+        requestRender();
+      }
+    });
+  })();
+  </script>
+</body>
+</html>
